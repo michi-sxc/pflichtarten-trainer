@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f2eddf">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Pflichtarten">
+  <title>Pflichtarten Trainer</title>
+  <link rel="manifest" href="manifest.webmanifest?v=1">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=6">
+</head>
+<body>
+  <main>
+    <div class="learning-stats" aria-label="Lernstand">
+      <span class="stats-label">Lernstand</span>
+      <span><strong id="mastered-count">0</strong> sicher</span>
+      <span><strong id="due-count">0</strong> üben</span>
+    </div>
+    <section id="setup-view" class="view setup-view" aria-labelledby="setup-title">
+      <div class="intro">
+        <p class="eyebrow">Freiberger Pflichtartenheft</p>
+        <h1 id="setup-title">Arten erkennen.<br>Namen behalten.</h1>
+        <p>Jede Frage lädt ein anderes Fundfoto. Dein Lernstand bleibt nur auf diesem Gerät gespeichert.</p>
+      </div>
+
+      <form id="setup-form" class="setup-card">
+        <p class="setup-index" aria-hidden="true">Einstellungen / 01</p>
+        <fieldset>
+          <legend>Was möchtest du lernen?</legend>
+          <div class="segmented" data-field="scope">
+            <label><input type="radio" name="scope" value="all" checked><span>Alle</span></label>
+            <label><input type="radio" name="scope" value="plant"><span>Pflanzen</span></label>
+            <label><input type="radio" name="scope" value="animal"><span>Tierarten</span></label>
+            <label><input type="radio" name="scope" value="taxon"><span>Tiergruppen</span></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Antwortmodus</legend>
+          <div class="mode-grid">
+            <label class="mode-option">
+              <input type="radio" name="mode" value="choice" checked>
+              <span><strong>Single Choice</strong><small>Nur ähnliche Arten oder Gruppen als Auswahl</small></span>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="mode" value="input">
+              <span><strong>Direkte Eingabe</strong><small>Deutschen und lateinischen Namen selbst nennen</small></span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="form-row">
+          <label class="select-label">Fragen
+            <select id="question-count" name="count">
+              <option value="10">10</option>
+              <option value="20" selected>20</option>
+              <option value="40">40</option>
+              <option value="all">Alle im Bereich</option>
+            </select>
+          </label>
+          <label class="check-label">
+            <input id="smart-order" type="checkbox" name="smart" checked>
+            <span><strong>Schlau mischen</strong><small>Unsichere Arten kommen häufiger</small></span>
+          </label>
+        </div>
+
+        <button class="button primary wide" type="submit">Quiz starten</button>
+        <button id="mistakes-start" class="button subtle wide" type="button" hidden>Nur Fehler wiederholen</button>
+        <p id="species-count" class="form-note"></p>
+      </form>
+    </section>
+
+    <section id="quiz-view" class="view quiz-view" aria-labelledby="question-title" hidden>
+      <div class="quiz-topbar">
+        <div class="quiz-nav">
+          <button id="quit-button" class="text-button" type="button">Beenden</button>
+          <button id="previous-button" class="text-button" type="button" disabled>Vorige Frage</button>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-label"><span id="progress-text">1 / 20</span><span id="score-text">0 richtig</span></div>
+          <div class="progress-track" aria-hidden="true"><span id="progress-bar"></span></div>
+        </div>
+      </div>
+
+      <article class="question-card">
+        <div class="image-stage">
+          <div id="image-loader" class="image-loader" role="status">Foto wird geladen ...</div>
+          <img id="species-image" alt="Zu bestimmende Art" hidden>
+          <div id="image-error" class="image-error" hidden>
+            <strong>Foto konnte nicht geladen werden.</strong>
+            <span>Prüfe deine Internetverbindung oder lade ein neues.</span>
+          </div>
+          <button id="new-image" class="image-action" type="button">Anderes Foto</button>
+        </div>
+        <div class="credit-row">
+          <span id="image-credit">Fotoquelle: iNaturalist</span>
+          <a id="source-link" href="https://www.inaturalist.org" target="_blank" rel="noreferrer">Quelle öffnen</a>
+        </div>
+
+        <div class="question-body">
+          <p id="question-kicker" class="eyebrow">Pflanze bestimmen</p>
+          <h2 id="question-title">Welche Art ist das?</h2>
+
+          <div id="choice-answer" class="choices" role="group" aria-label="Antwortmöglichkeiten"></div>
+
+          <form id="input-answer" class="input-answer" hidden>
+            <label>Deutscher Name
+              <input id="german-input" autocomplete="off" autocapitalize="words" spellcheck="false">
+            </label>
+            <label>Wissenschaftlicher Name
+              <input id="latin-input" autocomplete="off" autocapitalize="none" spellcheck="false">
+            </label>
+            <button class="button primary" type="submit">Prüfen</button>
+          </form>
+
+          <div class="question-actions">
+            <button id="hint-button" class="text-button" type="button">Hinweis</button>
+            <button id="reveal-button" class="text-button" type="button">Weiß ich nicht</button>
+          </div>
+          <p id="hint-text" class="hint" aria-live="polite" hidden></p>
+
+          <div id="feedback" class="feedback" aria-live="polite" hidden>
+            <p id="feedback-label" class="feedback-label"></p>
+            <div class="answer-name"><strong id="answer-german"></strong><em id="answer-latin"></em></div>
+            <section id="learning-note" class="learning-note" aria-labelledby="features-title">
+              <h3 id="features-title">Erkennungsmerkmale</h3>
+              <p id="feature-text"></p>
+              <div id="comparison-block" hidden>
+                <h3>Unterscheidung in dieser Frage</h3>
+                <ul id="comparison-list"></ul>
+              </div>
+            </section>
+            <button id="next-button" class="button primary" type="button">Nächste Frage</button>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section id="results-view" class="view results-view" aria-labelledby="results-title" hidden>
+      <p class="eyebrow">Runde beendet</p>
+      <h1 id="results-title">Dein Ergebnis</h1>
+      <div class="result-score"><strong id="result-percent">0 %</strong><span id="result-detail"></span></div>
+      <div id="result-message" class="result-message"></div>
+      <div id="mistake-review" class="mistake-review" hidden>
+        <h2>Noch einmal ansehen</h2>
+        <ul id="mistake-list"></ul>
+      </div>
+      <div class="result-actions">
+        <button id="repeat-mistakes" class="button primary" type="button">Fehler wiederholen</button>
+        <button id="back-home" class="button subtle" type="button">Neue Runde</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Arten und Tiergruppen nach dem Freiberger Pflichtartenheft, 12. Auflage 2020. Fotos von iNaturalist-Mitwirkenden.</span>
+    <button id="install-button" class="footer-install" type="button" hidden>Auf diesem Gerät installieren</button>
+  </footer>
+  <script src="species.js?v=3"></script>
+  <script src="features.js?v=1"></script>
+  <script src="features-extra.js?v=1"></script>
+  <script src="app.js?v=6"></script>
+</body>
+</html>
