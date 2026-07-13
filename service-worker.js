@@ -1,4 +1,4 @@
-const VERSION = "pflichtarten-v4";
+const VERSION = "pflichtarten-v5";
 const SHELL_CACHE = `${VERSION}-shell`;
 const DATA_CACHE = `${VERSION}-data`;
 const PHOTO_CACHE = `${VERSION}-photos`;
@@ -11,7 +11,7 @@ const shellFiles = [
   "./taxonomy.js?v=1",
   "./features.js?v=1",
   "./features-extra.js?v=1",
-  "./app.js?v=8",
+  "./app.js?v=9",
   "./manifest.webmanifest?v=1",
   "./icons/icon.svg",
   "./icons/icon-180.png",

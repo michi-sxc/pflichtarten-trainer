@@ -221,10 +221,7 @@ function renderQuestion() {
   }
   if (state.mode === "choice") renderChoices(species, response);
   else if (!state.answered) requestAnimationFrame(() => elements.germanInput.focus());
-  else {
-    elements.germanInput.setAttribute("aria-invalid", String(!response.germanOk));
-    elements.latinInput.setAttribute("aria-invalid", String(!response.latinOk));
-  }
+  else showInputValidity(response);
   loadImage(species);
   if (response) showFeedback(response.correct, species, false);
 }
@@ -291,20 +288,32 @@ function acceptedNames(primary, aliases) {
   return [primary, ...aliases].map(normalize);
 }
 
+function showInputValidity({ germanProvided, latinProvided, germanOk, latinOk }) {
+  const neitherProvided = !germanProvided && !latinProvided;
+  elements.germanInput.setAttribute("aria-invalid", String(neitherProvided || germanProvided && !germanOk));
+  elements.latinInput.setAttribute("aria-invalid", String(neitherProvided || latinProvided && !latinOk));
+}
+
 function gradeInput(event) {
   event.preventDefault();
   if (state.answered) return;
   const species = state.queue[state.index];
-  const germanOk = acceptedNames(species.german, species.germanAliases).includes(normalize(elements.germanInput.value));
-  const latinOk = acceptedNames(species.latin, species.latinAliases).includes(normalize(elements.latinInput.value));
-  elements.germanInput.setAttribute("aria-invalid", String(!germanOk));
-  elements.latinInput.setAttribute("aria-invalid", String(!latinOk));
-  recordAnswer(germanOk && latinOk, {
+  const germanValue = normalize(elements.germanInput.value);
+  const latinValue = normalize(elements.latinInput.value);
+  const germanProvided = Boolean(germanValue);
+  const latinProvided = Boolean(latinValue);
+  const germanOk = germanProvided && acceptedNames(species.german, species.germanAliases).includes(germanValue);
+  const latinOk = latinProvided && acceptedNames(species.latin, species.latinAliases).includes(latinValue);
+  const detail = {
     german: elements.germanInput.value,
     latin: elements.latinInput.value,
+    germanProvided,
+    latinProvided,
     germanOk,
     latinOk
-  });
+  };
+  showInputValidity(detail);
+  recordAnswer(germanOk || latinOk, detail);
 }
 
 function recordAnswer(correct, detail = {}) {

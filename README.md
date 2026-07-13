@@ -21,7 +21,7 @@ Die Oberfläche, Artliste, Merkmale und bereits verwendete Fotos funktionieren o
 ## Enthalten
 
 - Single Choice mit ausschließlich ähnlichen Arten bzw. gleichrangigen Tiergruppen
-- direkte Eingabe beider Namen
+- direkte Eingabe: deutscher oder wissenschaftlicher Name genügt
 - Pflanzen, Tierarten, Tiergruppen oder gemischte Runden
 - frei wählbare Pflanzenfamilien und Tierordnungen
 - wechselnde Fundfotos über exakt aufgelöste iNaturalist-Taxon-IDs
