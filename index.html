@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
   <main>
@@ -27,8 +27,8 @@
     <section id="setup-view" class="view setup-view" aria-labelledby="setup-title">
       <div class="intro">
         <p class="eyebrow">Freiberger Pflichtartenheft</p>
-        <h1 id="setup-title">Arten erkennen.<br>Namen behalten.</h1>
-        <p>Jede Frage lädt ein anderes Fundfoto. Dein Lernstand bleibt nur auf diesem Gerät gespeichert.</p>
+        <h1 id="setup-title">Artenquiz</h1>
+        <p>Pflichtarten mit wechselnden Fundfotos üben. Der Lernstand bleibt auf diesem Gerät.</p>
       </div>
 
       <form id="setup-form" class="setup-card">
@@ -42,6 +42,26 @@
             <label><input type="radio" name="scope" value="taxon"><span>Tiergruppen</span></label>
           </div>
         </fieldset>
+
+        <details id="taxonomy-filter" class="taxonomy-filter">
+          <summary><span>Familien / Ordnungen</span><small id="taxonomy-summary">Alle ausgewählt</small></summary>
+          <div class="taxonomy-sections">
+            <section id="plant-taxonomy" class="taxonomy-section" aria-labelledby="plant-taxonomy-title">
+              <div class="taxonomy-heading">
+                <h3 id="plant-taxonomy-title">Pflanzenfamilien</h3>
+                <div><button type="button" data-taxonomy-all="plant">Alle</button><button type="button" data-taxonomy-none="plant">Keine</button></div>
+              </div>
+              <div id="plant-taxonomy-list" class="taxonomy-list"></div>
+            </section>
+            <section id="animal-taxonomy" class="taxonomy-section" aria-labelledby="animal-taxonomy-title">
+              <div class="taxonomy-heading">
+                <h3 id="animal-taxonomy-title">Tierordnungen</h3>
+                <div><button type="button" data-taxonomy-all="animal">Alle</button><button type="button" data-taxonomy-none="animal">Keine</button></div>
+              </div>
+              <div id="animal-taxonomy-list" class="taxonomy-list"></div>
+            </section>
+          </div>
+        </details>
 
         <fieldset>
           <legend>Antwortmodus</legend>
@@ -72,7 +92,7 @@
           </label>
         </div>
 
-        <button class="button primary wide" type="submit">Quiz starten</button>
+        <button id="start-button" class="button primary wide" type="submit">Quiz starten</button>
         <button id="mistakes-start" class="button subtle wide" type="button" hidden>Nur Fehler wiederholen</button>
         <p id="species-count" class="form-note"></p>
       </form>
@@ -132,6 +152,7 @@
             <div class="answer-name"><strong id="answer-german"></strong><em id="answer-latin"></em></div>
             <section id="learning-note" class="learning-note" aria-labelledby="features-title">
               <h3 id="features-title">Erkennungsmerkmale</h3>
+              <p id="focus-text" class="learning-focus" hidden></p>
               <p id="feature-text"></p>
               <div id="comparison-block" hidden>
                 <h3>Unterscheidung in dieser Frage</h3>
@@ -165,8 +186,9 @@
     <button id="install-button" class="footer-install" type="button" hidden>Auf diesem Gerät installieren</button>
   </footer>
   <script src="species.js?v=3"></script>
+  <script src="taxonomy.js?v=1"></script>
   <script src="features.js?v=1"></script>
   <script src="features-extra.js?v=1"></script>
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

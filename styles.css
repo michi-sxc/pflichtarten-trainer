@@ -104,6 +104,37 @@ legend { margin-bottom: 12px; font-family: var(--serif); font-size: 1.05rem; fon
 .segmented input:checked + span { background: var(--ink); color: var(--paper-light); }
 .segmented input:focus-visible + span { outline: 3px solid rgba(154, 63, 46, .3); outline-offset: -3px; }
 
+.taxonomy-filter { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.taxonomy-filter summary {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 2px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-weight: 400;
+  list-style: none;
+}
+.taxonomy-filter summary::-webkit-details-marker { display: none; }
+.taxonomy-filter summary::after { content: "+"; margin-left: 2px; color: var(--rust-dark); font-size: 1rem; }
+.taxonomy-filter[open] summary::after { content: "−"; }
+.taxonomy-filter summary small { margin-left: auto; color: var(--muted); font-size: .68rem; font-weight: 300; }
+.taxonomy-sections { display: grid; gap: 24px; padding: 8px 0 16px; }
+.taxonomy-filter[data-scope="all"] .taxonomy-sections { grid-template-columns: 1fr 1fr; }
+.taxonomy-heading { min-height: 28px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.taxonomy-heading h3 { margin: 0; font-family: var(--serif); font-size: .95rem; font-weight: 400; }
+.taxonomy-heading div { display: flex; gap: 10px; }
+.taxonomy-heading button { padding: 1px 0; border: 0; border-bottom: 1px solid currentColor; background: none; color: var(--rust-dark); cursor: pointer; font-size: .63rem; }
+.taxonomy-list { max-height: 250px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow-y: auto; border-top: 1px solid var(--line); }
+.taxonomy-filter[data-scope="all"] .taxonomy-list { grid-template-columns: 1fr; }
+.taxonomy-option { min-width: 0; display: flex; align-items: flex-start; gap: 9px; padding: 8px 5px 8px 1px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.taxonomy-option input { flex: none; margin: 3px 0 0; accent-color: var(--rust); }
+.taxonomy-option span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.taxonomy-option strong, .taxonomy-option em { overflow-wrap: anywhere; }
+.taxonomy-option strong { font-size: .69rem; font-weight: 400; }
+.taxonomy-option em { color: var(--muted); font-size: .61rem; }
+
 .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .mode-option { position: relative; cursor: pointer; }
 .mode-option + .mode-option { border-left: 1px solid var(--line); }
@@ -221,6 +252,7 @@ select:focus, .input-answer input:focus { outline: 2px solid var(--rust); outlin
 .learning-note { margin: 2px 0 4px; padding: 18px 0 4px; border-top: 1px solid var(--line-dark); }
 .learning-note h3 { margin: 0 0 7px; font-family: var(--mono); font-size: .7rem; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; }
 .learning-note p { margin: 0 0 18px; color: var(--ink); font-family: var(--mono); font-size: .76rem; line-height: 1.65; }
+.learning-note .learning-focus { padding-left: 11px; border-left: 2px solid var(--rust); color: var(--muted); }
 .learning-note ul { margin: 0 0 18px; padding: 0; list-style: none; border-top: 1px solid var(--line); }
 .learning-note li { padding: 9px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: .7rem; line-height: 1.55; }
 .learning-note li strong { color: var(--ink); font-weight: 600; }
@@ -261,6 +293,7 @@ footer { width: min(100% - 48px, 1120px); margin: 0 auto; padding: 22px 0 36px; 
   .segmented label:nth-child(3) span { border-left: 0; border-top: 1px solid var(--line); }
   .segmented label:nth-child(4) span { border-top: 1px solid var(--line); }
   .mode-grid, .form-row { grid-template-columns: 1fr; }
+  .taxonomy-filter[data-scope] .taxonomy-sections, .taxonomy-list { grid-template-columns: 1fr; }
   .mode-option + .mode-option { border-top: 1px solid var(--line); border-left: 0; }
   .mode-option span { min-height: 92px; }
   .quiz-topbar { gap: 16px; }

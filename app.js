@@ -15,8 +15,12 @@ const elements = {
   due: $("#due-count"), speciesCount: $("#species-count"), mistakesStart: $("#mistakes-start"),
   resultPercent: $("#result-percent"), resultDetail: $("#result-detail"), resultMessage: $("#result-message"),
   mistakeReview: $("#mistake-review"), mistakeList: $("#mistake-list"), repeatMistakes: $("#repeat-mistakes"),
-  learningNote: $("#learning-note"), featureText: $("#feature-text"),
-  comparisonBlock: $("#comparison-block"), comparisonList: $("#comparison-list")
+  learningNote: $("#learning-note"), featureText: $("#feature-text"), focusText: $("#focus-text"),
+  featuresTitle: $("#features-title"), comparisonBlock: $("#comparison-block"), comparisonList: $("#comparison-list"),
+  taxonomyFilter: $("#taxonomy-filter"), taxonomySummary: $("#taxonomy-summary"),
+  plantTaxonomy: $("#plant-taxonomy"), animalTaxonomy: $("#animal-taxonomy"),
+  plantTaxonomyList: $("#plant-taxonomy-list"), animalTaxonomyList: $("#animal-taxonomy-list"),
+  startButton: $("#start-button")
 };
 
 const STORAGE_KEY = "pflichtarten-trainer-v1";
@@ -24,7 +28,8 @@ let installPrompt;
 const state = {
   stats: loadStats(), queue: [], index: 0, score: 0, mode: "choice", scope: "all",
   smart: true, answered: false, hintUsed: false, roundMistakes: [], imageToken: 0,
-  recentImages: new Map(), responses: [], options: [], photos: [], taxa: new Map()
+  recentImages: new Map(), responses: [], options: [], photos: [], taxa: new Map(),
+  selectedTaxa: new Set(Object.values(TAXON_FILTERS).flat().map(taxon => taxon.key))
 };
 
 function loadStats() {
@@ -56,17 +61,56 @@ function currentScope() {
 }
 
 function scopedSpecies(scope = currentScope()) {
-  if (scope === "all") return SPECIES;
-  if (scope === "taxon") return SPECIES.filter(item => item.kind === "taxon");
-  if (scope === "animal") return SPECIES.filter(item => item.group === "animal" && item.kind === "species");
-  return SPECIES.filter(item => item.group === scope);
+  const inScope = item => scope === "all" ||
+    (scope === "taxon" ? item.kind === "taxon" : item.group === scope && item.kind === "species");
+  return SPECIES.filter(item => inScope(item) &&
+    (item.kind === "taxon" || state.selectedTaxa.has(TAXONOMY_BY_ID[item.id]?.key)));
+}
+
+function renderTaxonomyFilters() {
+  for (const group of ["plant", "animal"]) {
+    const list = elements[`${group}TaxonomyList`];
+    list.replaceChildren(...TAXON_FILTERS[group].map(taxon => {
+      const label = document.createElement("label");
+      label.className = "taxonomy-option";
+      label.innerHTML = `<input type="checkbox" value="${taxon.key}" checked><span><strong>${escapeHtml(taxon.german)}</strong><em>${escapeHtml(taxon.latin)}</em></span>`;
+      label.querySelector("input").addEventListener("change", event => {
+        if (event.target.checked) state.selectedTaxa.add(taxon.key);
+        else state.selectedTaxa.delete(taxon.key);
+        updateAvailableCount();
+      });
+      return label;
+    }));
+  }
+}
+
+function setTaxonomyGroup(group, selected) {
+  for (const taxon of TAXON_FILTERS[group]) {
+    if (selected) state.selectedTaxa.add(taxon.key);
+    else state.selectedTaxa.delete(taxon.key);
+  }
+  elements[`${group}TaxonomyList`].querySelectorAll("input").forEach(input => { input.checked = selected; });
+  updateAvailableCount();
+}
+
+function updateTaxonomyFilter(scope) {
+  elements.taxonomyFilter.dataset.scope = scope;
+  elements.taxonomyFilter.hidden = scope === "taxon";
+  elements.plantTaxonomy.hidden = scope === "animal";
+  elements.animalTaxonomy.hidden = scope === "plant";
+  if (scope === "taxon") return;
+  const visible = scope === "all" ? [...TAXON_FILTERS.plant, ...TAXON_FILTERS.animal] : TAXON_FILTERS[scope];
+  const selected = visible.filter(taxon => state.selectedTaxa.has(taxon.key)).length;
+  elements.taxonomySummary.textContent = selected === visible.length ? "Alle ausgewählt" : `${selected} von ${visible.length}`;
 }
 
 function updateAvailableCount() {
   const scope = currentScope();
   const count = scopedSpecies().length;
   const labels = { all: "Arten und Tiergruppen", plant: "Pflanzenarten", animal: "Tierarten", taxon: "Tiergruppen" };
-  elements.speciesCount.textContent = `${count} ${labels[scope]} in dieser Auswahl`;
+  updateTaxonomyFilter(scope);
+  elements.speciesCount.textContent = count ? `${count} ${labels[scope]} in dieser Auswahl` : "Mindestens eine Gruppe auswählen";
+  elements.startButton.disabled = count === 0;
 }
 
 function shuffle(items) {
@@ -100,6 +144,7 @@ function startQuiz({ mistakesOnly = false, species = null } = {}) {
   state.mode = form.get("mode") || "choice";
   state.smart = form.get("smart") === "on";
   const pool = species || scopedSpecies(state.scope).filter(item => !mistakesOnly || getStat(item).mistake);
+  if (!pool.length) return;
   const countValue = form.get("count") || "20";
   const count = mistakesOnly || countValue === "all" ? pool.length : Math.min(Number(countValue), pool.length);
   state.queue = state.smart ? weightedSample(pool, count) : shuffle(pool).slice(0, count);
@@ -284,6 +329,10 @@ function showFeedback(correct, species, focusNext = true) {
 
 function showLearningNote(species) {
   elements.learningNote.hidden = false;
+  const focus = diagnosticFocus(species);
+  elements.featuresTitle.textContent = focus ? "Merkmalsfokus" : "Erkennungsmerkmale";
+  elements.focusText.textContent = focus;
+  elements.focusText.hidden = !focus;
   elements.featureText.textContent = FEATURES[species.id];
   const alternatives = state.mode === "choice"
     ? (state.options[state.index] || []).map(id => SPECIES.find(item => item.id === id)).filter(item => item && item.id !== species.id)
@@ -367,18 +416,25 @@ async function fetchINaturalist(species) {
   const response = await fetch(`https://api.inaturalist.org/v1/observations?${params}`);
   if (response.ok) {
     const data = await response.json();
-    const observations = data.results.filter(item => item.photos?.length &&
-      (item.taxon?.id === taxon.id || item.taxon?.ancestor_ids?.includes(taxon.id)));
+    const observations = shuffle(data.results.filter(item => item.photos?.length &&
+      (item.taxon?.id === taxon.id || item.taxon?.ancestor_ids?.includes(taxon.id))));
     const recent = state.recentImages.get(species.id) || [];
-    // main photo shows the ID target more reliably than later habitat shots
-    const photos = shuffle(observations.map(observation => ({ photo: observation.photos[0], observation })));
-    const picked = photos.find(item => !recent.includes(largerPhoto(item.photo.url))) || photos[0];
+    const detailed = Boolean(diagnosticFocus(species));
+    // multi-photo records often include the close-up grasses and ferns need
+    const candidates = detailed
+      ? [...observations.filter(item => item.photos.length > 1), ...observations.filter(item => item.photos.length === 1)]
+      : observations;
+    const picked = candidates.find(item => !recent.includes(largerPhoto(item.photos[0].url))) || candidates[0];
     if (picked) {
-      const url = largerPhoto(picked.photo.url);
+      const variants = picked.photos.slice(0, detailed ? 4 : 1).map(photo => ({
+        url: largerPhoto(photo.url),
+        credit: photo.attribution || "iNaturalist-Mitwirkende"
+      }));
       return {
-        url,
-        credit: picked.photo.attribution || "iNaturalist-Mitwirkende",
-        link: picked.observation.uri || `https://www.inaturalist.org/observations/${picked.observation.id}`
+        ...variants[0],
+        variants,
+        variantIndex: 0,
+        link: picked.uri || `https://www.inaturalist.org/observations/${picked.id}`
       };
     }
   }
@@ -423,12 +479,29 @@ async function fetchCommons(species) {
 }
 
 function displayPhoto(photo) {
-  elements.image.src = photo.url;
+  const current = photo.variants?.[photo.variantIndex] || photo;
+  elements.image.src = current.url;
   elements.image.alt = "Fundfoto der zu bestimmenden Art";
   elements.image.hidden = false;
   elements.imageLoader.hidden = true;
-  elements.imageCredit.textContent = photo.credit;
+  elements.imageCredit.textContent = current.credit;
   elements.sourceLink.href = photo.link;
+  elements.newImage.textContent = photo.variantIndex < (photo.variants?.length || 1) - 1 ? "Nächste Ansicht" : "Anderes Foto";
+}
+
+async function nextImage() {
+  const species = state.queue[state.index];
+  const photo = state.photos[state.index];
+  if (!photo?.variants || photo.variantIndex >= photo.variants.length - 1) return loadImage(species, true);
+  const next = photo.variants[++photo.variantIndex];
+  elements.newImage.disabled = true;
+  try {
+    await preload(next.url);
+    rememberImage(species, next.url);
+    displayPhoto(photo);
+  } finally {
+    elements.newImage.disabled = false;
+  }
 }
 
 async function loadImage(species = state.queue[state.index], force = false) {
@@ -506,8 +579,10 @@ elements.hintButton.addEventListener("click", revealHint);
 elements.revealButton.addEventListener("click", revealAnswer);
 elements.previousButton.addEventListener("click", previousQuestion);
 elements.nextButton.addEventListener("click", nextQuestion);
-elements.newImage.addEventListener("click", () => loadImage(undefined, true));
+elements.newImage.addEventListener("click", nextImage);
 elements.mistakesStart.addEventListener("click", () => startQuiz({ mistakesOnly: true }));
+$$('[data-taxonomy-all]').forEach(button => button.addEventListener("click", () => setTaxonomyGroup(button.dataset.taxonomyAll, true)));
+$$('[data-taxonomy-none]').forEach(button => button.addEventListener("click", () => setTaxonomyGroup(button.dataset.taxonomyNone, false)));
 $("#quit-button").addEventListener("click", () => { showView("setup"); updateHeader(); });
 $("#back-home").addEventListener("click", () => { showView("setup"); updateHeader(); });
 elements.setupForm.addEventListener("change", updateAvailableCount);
@@ -539,4 +614,5 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(() => {}));
 }
 
+renderTaxonomyFilters();
 updateHeader();

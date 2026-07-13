@@ -23,11 +23,13 @@ Die Oberfläche, Artliste, Merkmale und bereits verwendete Fotos funktionieren o
 - Single Choice mit ausschließlich ähnlichen Arten bzw. gleichrangigen Tiergruppen
 - direkte Eingabe beider Namen
 - Pflanzen, Tierarten, Tiergruppen oder gemischte Runden
+- frei wählbare Pflanzenfamilien und Tierordnungen
 - wechselnde Fundfotos über exakt aufgelöste iNaturalist-Taxon-IDs
+- mehrere Ansichten derselben Beobachtung bei Gräsern, Binsen, Seggen und Farnen
 - Wikimedia Commons als Bild-Fallback
 - Hinweise, Fehlerwiederholung und lokal gespeicherter Lernstand
 - Rücknavigation zur vorherigen Frage mit unverändertem Foto
-- Erkennungsmerkmale und Vergleichshinweise aus dem ausgefüllten Artenheft nach jeder Antwort
+- Erkennungsmerkmale, Merkmalsfokus und Vergleichshinweise erst nach jeder Antwort
 - gewichtete Wiederholung unsicherer Arten
 - responsive Feldheft-Gestaltung mit Baskerville Old Face und JetBrains Mono Light
 
