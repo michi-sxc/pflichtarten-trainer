@@ -24,11 +24,12 @@ const elements = {
 };
 
 const STORAGE_KEY = "pflichtarten-trainer-v1";
+const TAXON_CACHE_KEY = "pflichtarten-taxa-v1";
 let installPrompt;
 const state = {
   stats: loadStats(), queue: [], index: 0, score: 0, mode: "choice", scope: "all",
   smart: true, answered: false, hintUsed: false, roundMistakes: [], imageToken: 0,
-  recentImages: new Map(), responses: [], options: [], photos: [], taxa: new Map(),
+  recentImages: new Map(), responses: [], options: [], photos: [], taxa: loadTaxa(), prefetches: new Map(), roundToken: 0,
   selectedTaxa: new Set(Object.values(TAXON_FILTERS).flat().map(taxon => taxon.key))
 };
 
@@ -40,6 +41,25 @@ function loadStats() {
 function saveStats() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.stats)); }
   catch { /* private mode can block storage, quiz still works */ }
+}
+
+function loadTaxa() {
+  try { return new Map(Object.entries(JSON.parse(localStorage.getItem(TAXON_CACHE_KEY)) || {})); }
+  catch { return new Map(); }
+}
+
+function saveTaxa() {
+  try {
+    const compact = Object.fromEntries([...state.taxa].map(([id, taxon]) => [id, {
+      id: taxon.id,
+      default_photo: taxon.default_photo && {
+        url: taxon.default_photo.url,
+        medium_url: taxon.default_photo.medium_url,
+        attribution: taxon.default_photo.attribution
+      }
+    }]));
+    localStorage.setItem(TAXON_CACHE_KEY, JSON.stringify(compact));
+  } catch { /* cache is optional */ }
 }
 
 function getStat(species) {
@@ -154,6 +174,8 @@ function startQuiz({ mistakesOnly = false, species = null } = {}) {
   state.responses = [];
   state.options = [];
   state.photos = [];
+  state.prefetches.clear();
+  state.roundToken++;
   showView("quiz");
   renderQuestion();
 }
@@ -376,8 +398,16 @@ function imageQuery(species) {
   return (species.imageName || species.latin).replace(/\s+agg\.?$/i, "");
 }
 
+async function fetchWithTimeout(url, timeout = 6500) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeout);
+  try { return await fetch(url, { signal: controller.signal }); }
+  finally { window.clearTimeout(timer); }
+}
+
 function largerPhoto(url) {
-  return url.replace(/\/(square|small|thumb)\./, "/large.");
+  const size = window.innerWidth <= 700 ? "medium" : "large";
+  return url.replace(/\/(square|small|thumb|medium|large)\./, `/${size}.`);
 }
 
 function rememberImage(species, url) {
@@ -394,13 +424,16 @@ async function resolveTaxon(species) {
   const names = [...new Set([imageQuery(species), species.latin, ...species.latinAliases].map(name =>
     name.replace(/\b(agg|kl|f)\.?\b/gi, " ").replace(/\s+/g, " ").trim()))];
   for (const name of names) {
-    const params = new URLSearchParams({ q: name, per_page: "30" });
-    const response = await fetch(`https://api.inaturalist.org/v1/taxa?${params}`);
+    const params = new URLSearchParams({ q: name, per_page: "10" });
+    let response;
+    try { response = await fetchWithTimeout(`https://api.inaturalist.org/v1/taxa?${params}`); }
+    catch { continue; }
     if (!response.ok) continue;
     const data = await response.json();
     const exact = data.results.find(taxon => cleanTaxonName(taxon.name) === cleanTaxonName(name));
     if (exact) {
       state.taxa.set(species.id, exact);
+      saveTaxa();
       return exact;
     }
   }
@@ -411,10 +444,12 @@ async function fetchINaturalist(species) {
   const taxon = await resolveTaxon(species);
   const params = new URLSearchParams({
     taxon_id: String(taxon.id), photos: "true", quality_grade: "research", photo_license: "any",
-    order_by: "random", per_page: "30"
+    order_by: "random", per_page: "16"
   });
-  const response = await fetch(`https://api.inaturalist.org/v1/observations?${params}`);
-  if (response.ok) {
+  let response;
+  try { response = await fetchWithTimeout(`https://api.inaturalist.org/v1/observations?${params}`); }
+  catch { /* default taxon photo below is the fast fallback */ }
+  if (response?.ok) {
     const data = await response.json();
     const observations = shuffle(data.results.filter(item => item.photos?.length &&
       (item.taxon?.id === taxon.id || item.taxon?.ancestor_ids?.includes(taxon.id))));
@@ -458,10 +493,11 @@ function stripHtml(value = "") {
 async function fetchCommons(species) {
   const params = new URLSearchParams({
     action: "query", generator: "search", gsrsearch: `intitle:\"${imageQuery(species)}\" filetype:bitmap`,
-    gsrnamespace: "6", gsrlimit: "20", prop: "imageinfo", iiprop: "url|extmetadata", iiurlwidth: "1400",
+    gsrnamespace: "6", gsrlimit: "12", prop: "imageinfo", iiprop: "url|extmetadata",
+    iiurlwidth: window.innerWidth <= 700 ? "700" : "1200",
     format: "json", origin: "*"
   });
-  const response = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`);
+  const response = await fetchWithTimeout(`https://commons.wikimedia.org/w/api.php?${params}`);
   if (!response.ok) throw new Error("No Commons response");
   const data = await response.json();
   const expected = cleanTaxonName(imageQuery(species));
@@ -476,6 +512,33 @@ async function fetchCommons(species) {
   const artist = stripHtml(metadata.Artist?.value) || "Wikimedia-Commons-Mitwirkende";
   const license = metadata.LicenseShortName?.value ? ` · ${metadata.LicenseShortName.value}` : "";
   return { url: info.thumburl, credit: `${artist}${license}`, link: info.descriptionurl };
+}
+
+async function fetchPhoto(species) {
+  try { return await fetchINaturalist(species); }
+  catch { return fetchCommons(species); }
+}
+
+function prefetchImage(index) {
+  if (index >= state.queue.length || state.photos[index] || state.prefetches.has(index)) return;
+  const species = state.queue[index];
+  const roundToken = state.roundToken;
+  const task = fetchPhoto(species).then(async photo => {
+    await preload(photo.url, "low");
+    if (roundToken === state.roundToken && state.queue[index]?.id === species.id) state.photos[index] = photo;
+    return photo;
+  }).catch(() => null);
+  state.prefetches.set(index, task);
+  task.finally(() => {
+    if (state.prefetches.get(index) === task) state.prefetches.delete(index);
+  });
+}
+
+function warmImages(index, photo) {
+  prefetchImage(index + 1);
+  const warmVariants = () => photo.variants?.slice(1).forEach(item => preload(item.url, "low").catch(() => {}));
+  if ("requestIdleCallback" in window) window.requestIdleCallback(warmVariants, { timeout: 1200 });
+  else window.setTimeout(warmVariants, 250);
 }
 
 function displayPhoto(photo) {
@@ -516,19 +579,20 @@ async function loadImage(species = state.queue[state.index], force = false) {
   const cached = state.photos[questionIndex];
   if (cached && !force) {
     displayPhoto(cached);
+    warmImages(questionIndex, cached);
     elements.newImage.disabled = false;
     return;
   }
   try {
-    let photo;
-    try { photo = await fetchINaturalist(species); }
-    catch { photo = await fetchCommons(species); }
+    let photo = !force ? state.photos[questionIndex] || await state.prefetches.get(questionIndex) : null;
+    if (!photo) photo = await fetchPhoto(species);
     if (token !== state.imageToken) return;
-    await preload(photo.url);
+    await preload(photo.url, "high");
     if (token !== state.imageToken) return;
     rememberImage(species, photo.url);
     state.photos[questionIndex] = photo;
     displayPhoto(photo);
+    warmImages(questionIndex, photo);
   } catch {
     if (token !== state.imageToken) return;
     elements.imageLoader.hidden = true;
@@ -540,11 +604,18 @@ async function loadImage(species = state.queue[state.index], force = false) {
   }
 }
 
-function preload(url) {
+function preload(url, priority = "auto") {
   return new Promise((resolve, reject) => {
     const image = new Image();
-    image.onload = resolve;
-    image.onerror = reject;
+    const timer = window.setTimeout(() => {
+      image.onload = image.onerror = null;
+      image.removeAttribute("src");
+      reject(new Error("Image timeout"));
+    }, 10000);
+    image.fetchPriority = priority;
+    image.decoding = "async";
+    image.onload = () => { window.clearTimeout(timer); resolve(); };
+    image.onerror = error => { window.clearTimeout(timer); reject(error); };
     image.src = url;
   });
 }

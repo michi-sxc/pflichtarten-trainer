@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
   <main>
@@ -113,7 +113,7 @@
       <article class="question-card">
         <div class="image-stage">
           <div id="image-loader" class="image-loader" role="status">Foto wird geladen ...</div>
-          <img id="species-image" alt="Zu bestimmende Art" hidden>
+          <img id="species-image" alt="Zu bestimmende Art" decoding="async" hidden>
           <div id="image-error" class="image-error" hidden>
             <strong>Foto konnte nicht geladen werden.</strong>
             <span>Prüfe deine Internetverbindung oder lade ein neues.</span>
@@ -189,6 +189,6 @@
   <script src="taxonomy.js?v=1"></script>
   <script src="features.js?v=1"></script>
   <script src="features-extra.js?v=1"></script>
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

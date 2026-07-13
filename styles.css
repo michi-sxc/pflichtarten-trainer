@@ -219,7 +219,7 @@ select:focus, .input-answer input:focus { outline: 2px solid var(--rust); outlin
   grid-template-columns: 28px minmax(0, 1fr);
   align-content: center;
   gap: 2px 9px;
-  padding: 12px 4px;
+  padding: 12px 4px 12px 14px;
   border: 0;
   border-bottom: 1px solid var(--line);
   border-radius: 0;
@@ -233,8 +233,8 @@ select:focus, .input-answer input:focus { outline: 2px solid var(--rust); outlin
 .choice strong { font-family: var(--serif); font-weight: 400; font-size: 1.08rem; }
 .choice strong, .choice em { overflow-wrap: anywhere; }
 .choice em { color: var(--muted); font-size: .84rem; }
-.choice.correct { background: var(--green-soft); box-shadow: inset 4px 0 var(--green); }
-.choice.wrong { background: var(--rust-soft); box-shadow: inset 4px 0 var(--rust); }
+.choice.correct { background: var(--green-soft); box-shadow: inset 3px 0 var(--green); }
+.choice.wrong { background: var(--rust-soft); box-shadow: inset 3px 0 var(--rust); }
 .choice:disabled { cursor: default; opacity: 1; }
 
 .input-answer { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: end; }
