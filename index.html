@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
   <main>
@@ -43,9 +43,11 @@
           </div>
         </fieldset>
 
-        <details id="taxonomy-filter" class="taxonomy-filter">
-          <summary><span>Familien / Ordnungen</span><small id="taxonomy-summary">Alle ausgewählt</small></summary>
-          <div class="taxonomy-sections">
+        <div id="taxonomy-filter" class="taxonomy-filter">
+          <button id="taxonomy-toggle" class="taxonomy-toggle" type="button" aria-expanded="false" aria-controls="taxonomy-sections">
+            <span>Familien / Ordnungen</span><small id="taxonomy-summary">Alle ausgewählt</small><span class="taxonomy-symbol" aria-hidden="true">+</span>
+          </button>
+          <div id="taxonomy-sections" class="taxonomy-sections" hidden>
             <section id="plant-taxonomy" class="taxonomy-section" aria-labelledby="plant-taxonomy-title">
               <div class="taxonomy-heading">
                 <h3 id="plant-taxonomy-title">Pflanzenfamilien</h3>
@@ -61,7 +63,7 @@
               <div id="animal-taxonomy-list" class="taxonomy-list"></div>
             </section>
           </div>
-        </details>
+        </div>
 
         <fieldset>
           <legend>Antwortmodus</legend>
@@ -189,6 +191,6 @@
   <script src="taxonomy.js?v=1"></script>
   <script src="features.js?v=1"></script>
   <script src="features-extra.js?v=1"></script>
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

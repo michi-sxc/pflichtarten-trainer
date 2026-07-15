@@ -17,7 +17,8 @@ const elements = {
   mistakeReview: $("#mistake-review"), mistakeList: $("#mistake-list"), repeatMistakes: $("#repeat-mistakes"),
   learningNote: $("#learning-note"), featureText: $("#feature-text"), focusText: $("#focus-text"),
   featuresTitle: $("#features-title"), comparisonBlock: $("#comparison-block"), comparisonList: $("#comparison-list"),
-  taxonomyFilter: $("#taxonomy-filter"), taxonomySummary: $("#taxonomy-summary"),
+  taxonomyFilter: $("#taxonomy-filter"), taxonomyToggle: $("#taxonomy-toggle"),
+  taxonomySections: $("#taxonomy-sections"), taxonomySummary: $("#taxonomy-summary"),
   plantTaxonomy: $("#plant-taxonomy"), animalTaxonomy: $("#animal-taxonomy"),
   plantTaxonomyList: $("#plant-taxonomy-list"), animalTaxonomyList: $("#animal-taxonomy-list"),
   startButton: $("#start-button")
@@ -92,8 +93,10 @@ function renderTaxonomyFilters() {
     const list = elements[`${group}TaxonomyList`];
     list.replaceChildren(...TAXON_FILTERS[group].map(taxon => {
       const label = document.createElement("label");
+      const inputId = `taxonomy-${taxon.key}`;
       label.className = "taxonomy-option";
-      label.innerHTML = `<input type="checkbox" value="${taxon.key}" checked><span><strong>${escapeHtml(taxon.german)}</strong><em>${escapeHtml(taxon.latin)}</em></span>`;
+      label.htmlFor = inputId;
+      label.innerHTML = `<input id="${inputId}" type="checkbox" value="${taxon.key}" checked><span><strong>${escapeHtml(taxon.german)}</strong><em>${escapeHtml(taxon.latin)}</em></span>`;
       label.querySelector("input").addEventListener("change", event => {
         if (event.target.checked) state.selectedTaxa.add(taxon.key);
         else state.selectedTaxa.delete(taxon.key);
@@ -102,6 +105,13 @@ function renderTaxonomyFilters() {
       return label;
     }));
   }
+}
+
+function toggleTaxonomyFilter() {
+  const expanded = elements.taxonomyToggle.getAttribute("aria-expanded") !== "true";
+  elements.taxonomyToggle.setAttribute("aria-expanded", String(expanded));
+  elements.taxonomyToggle.querySelector(".taxonomy-symbol").textContent = expanded ? "−" : "+";
+  elements.taxonomySections.hidden = !expanded;
 }
 
 function setTaxonomyGroup(group, selected) {
@@ -661,6 +671,7 @@ elements.previousButton.addEventListener("click", previousQuestion);
 elements.nextButton.addEventListener("click", nextQuestion);
 elements.newImage.addEventListener("click", nextImage);
 elements.mistakesStart.addEventListener("click", () => startQuiz({ mistakesOnly: true }));
+elements.taxonomyToggle.addEventListener("click", toggleTaxonomyFilter);
 $$('[data-taxonomy-all]').forEach(button => button.addEventListener("click", () => setTaxonomyGroup(button.dataset.taxonomyAll, true)));
 $$('[data-taxonomy-none]').forEach(button => button.addEventListener("click", () => setTaxonomyGroup(button.dataset.taxonomyNone, false)));
 $("#quit-button").addEventListener("click", () => { showView("setup"); updateHeader(); });
@@ -691,7 +702,10 @@ window.addEventListener("appinstalled", () => { installButton.hidden = true; });
 
 // PWA only works on https or localhost, file mode stays supported
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
-  window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(() => {}));
+  window.addEventListener("load", () => navigator.serviceWorker
+    .register("./service-worker.js", { updateViaCache: "none" })
+    .then(registration => registration.update())
+    .catch(() => {}));
 }
 
 renderTaxonomyFilters();
