@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
   <main>
@@ -64,6 +64,11 @@
             </section>
           </div>
         </div>
+
+        <label class="check-label marked-only">
+          <input id="marked-only" type="checkbox" name="markedOnly">
+          <span><strong>Nur Markierte</strong><small id="marked-filter-count">0 markiert</small></span>
+        </label>
 
         <fieldset>
           <legend>Antwortmodus</legend>
@@ -161,6 +166,17 @@
                 <ul id="comparison-list"></ul>
               </div>
             </section>
+            <section class="personal-study" aria-label="Eigene Lernnotizen">
+              <div class="personal-study-actions">
+                <label class="mark-current"><input id="mark-current" type="checkbox"><span>Für später markieren</span></label>
+                <button id="note-toggle" class="text-button" type="button" aria-expanded="false" aria-controls="note-editor">Notiz hinzufügen</button>
+              </div>
+              <div id="note-editor" class="note-editor" hidden>
+                <label for="species-note">Eigene Notiz</label>
+                <textarea id="species-note" rows="3" maxlength="1000" placeholder="Merkhilfe, Fundort, Verwechslungsmöglichkeit ..."></textarea>
+                <small>Wird nur auf diesem Gerät gespeichert.</small>
+              </div>
+            </section>
             <button id="next-button" class="button primary" type="button">Nächste Frage</button>
           </div>
         </div>
@@ -191,6 +207,6 @@
   <script src="taxonomy.js?v=1"></script>
   <script src="features.js?v=1"></script>
   <script src="features-extra.js?v=1"></script>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

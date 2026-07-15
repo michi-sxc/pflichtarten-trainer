@@ -21,12 +21,14 @@ const elements = {
   taxonomySections: $("#taxonomy-sections"), taxonomySummary: $("#taxonomy-summary"),
   plantTaxonomy: $("#plant-taxonomy"), animalTaxonomy: $("#animal-taxonomy"),
   plantTaxonomyList: $("#plant-taxonomy-list"), animalTaxonomyList: $("#animal-taxonomy-list"),
-  startButton: $("#start-button")
+  markedOnly: $("#marked-only"), markedFilterCount: $("#marked-filter-count"), startButton: $("#start-button"),
+  markCurrent: $("#mark-current"), noteToggle: $("#note-toggle"), noteEditor: $("#note-editor"), speciesNote: $("#species-note")
 };
 
 const STORAGE_KEY = "pflichtarten-trainer-v1";
 const TAXON_CACHE_KEY = "pflichtarten-taxa-v1";
 let installPrompt;
+let noteSaveTimer;
 const state = {
   stats: loadStats(), queue: [], index: 0, score: 0, mode: "choice", scope: "all",
   smart: true, answered: false, hintUsed: false, roundMistakes: [], imageToken: 0,
@@ -64,7 +66,7 @@ function saveTaxa() {
 }
 
 function getStat(species) {
-  return state.stats[species.id] || { seen: 0, correct: 0, wrong: 0, level: 0, mistake: false };
+  return state.stats[species.id] || { seen: 0, correct: 0, wrong: 0, level: 0, mistake: false, marked: false, note: "" };
 }
 
 function updateHeader() {
@@ -81,11 +83,12 @@ function currentScope() {
   return new FormData(elements.setupForm).get("scope") || "all";
 }
 
-function scopedSpecies(scope = currentScope()) {
+function scopedSpecies(scope = currentScope(), markedOnly = elements.markedOnly.checked) {
   const inScope = item => scope === "all" ||
     (scope === "taxon" ? item.kind === "taxon" : item.group === scope && item.kind === "species");
   return SPECIES.filter(item => inScope(item) &&
-    (item.kind === "taxon" || state.selectedTaxa.has(TAXONOMY_BY_ID[item.id]?.key)));
+    (item.kind === "taxon" || state.selectedTaxa.has(TAXONOMY_BY_ID[item.id]?.key)) &&
+    (!markedOnly || getStat(item).marked));
 }
 
 function renderTaxonomyFilters() {
@@ -136,11 +139,19 @@ function updateTaxonomyFilter(scope) {
 
 function updateAvailableCount() {
   const scope = currentScope();
-  const count = scopedSpecies().length;
+  const available = scopedSpecies(scope, false);
+  const markedCount = available.filter(item => getStat(item).marked).length;
+  const selected = elements.markedOnly.checked ? available.filter(item => getStat(item).marked) : available;
+  const count = selected.length;
+  const due = selected.filter(item => getStat(item).mistake).length;
   const labels = { all: "Arten und Tiergruppen", plant: "Pflanzenarten", animal: "Tierarten", taxon: "Tiergruppen" };
   updateTaxonomyFilter(scope);
-  elements.speciesCount.textContent = count ? `${count} ${labels[scope]} in dieser Auswahl` : "Mindestens eine Gruppe auswählen";
+  elements.markedFilterCount.textContent = `${markedCount} markiert`;
+  elements.speciesCount.textContent = count ? `${count} ${labels[scope]} in dieser Auswahl` :
+    (elements.markedOnly.checked ? "Keine markierten Einträge in dieser Auswahl" : "Mindestens eine Gruppe auswählen");
   elements.startButton.disabled = count === 0;
+  elements.mistakesStart.hidden = due === 0;
+  elements.mistakesStart.textContent = `${due} Fehler wiederholen`;
 }
 
 function shuffle(items) {
@@ -362,6 +373,7 @@ function showFeedback(correct, species, focusNext = true) {
   elements.hintButton.hidden = true;
   elements.revealButton.hidden = true;
   showLearningNote(species);
+  renderPersonalStudy(species);
   elements.progressBar.style.width = `${((state.index + 1) / state.queue.length) * 100}%`;
   elements.scoreText.textContent = `${state.score} richtig`;
   elements.nextButton.textContent = state.index + 1 === state.queue.length ? "Ergebnis ansehen" : "Nächste Frage";
@@ -386,6 +398,45 @@ function showLearningNote(species) {
   }));
 }
 
+function setNoteOpen(open) {
+  elements.noteToggle.setAttribute("aria-expanded", String(open));
+  elements.noteEditor.hidden = !open;
+  elements.noteToggle.textContent = open ? "Notiz schließen" :
+    (elements.speciesNote.value.trim() ? "Notiz ansehen" : "Notiz hinzufügen");
+}
+
+function renderPersonalStudy(species) {
+  const stat = getStat(species);
+  elements.markCurrent.checked = Boolean(stat.marked);
+  elements.speciesNote.value = stat.note || "";
+  setNoteOpen(Boolean(elements.speciesNote.value.trim()));
+}
+
+function updateCurrentStudy(patch, persist = true) {
+  const species = state.queue[state.index];
+  if (!species || !state.answered) return;
+  const stat = getStat(species);
+  Object.assign(stat, patch);
+  state.stats[species.id] = stat;
+  if (persist) saveStats();
+}
+
+function saveCurrentNote() {
+  updateCurrentStudy({ note: elements.speciesNote.value }, false);
+  window.clearTimeout(noteSaveTimer);
+  noteSaveTimer = window.setTimeout(() => {
+    noteSaveTimer = null;
+    saveStats();
+  }, 180);
+}
+
+function flushNoteSave() {
+  if (!noteSaveTimer) return;
+  window.clearTimeout(noteSaveTimer);
+  noteSaveTimer = null;
+  saveStats();
+}
+
 function makeHint(name) {
   return name.split(/([ -])/).map(part => /^[\p{L}]/u.test(part) ? `${part[0]}${"_".repeat(Math.max(1, part.length - 1))}` : part).join("");
 }
@@ -403,12 +454,14 @@ function revealAnswer() {
 }
 
 function nextQuestion() {
+  flushNoteSave();
   state.index++;
   renderQuestion();
 }
 
 function previousQuestion() {
   if (state.index === 0) return;
+  flushNoteSave();
   state.index--;
   renderQuestion();
 }
@@ -672,11 +725,19 @@ elements.nextButton.addEventListener("click", nextQuestion);
 elements.newImage.addEventListener("click", nextImage);
 elements.mistakesStart.addEventListener("click", () => startQuiz({ mistakesOnly: true }));
 elements.taxonomyToggle.addEventListener("click", toggleTaxonomyFilter);
+elements.markCurrent.addEventListener("change", () => {
+  updateCurrentStudy({ marked: elements.markCurrent.checked });
+  updateAvailableCount();
+});
+elements.noteToggle.addEventListener("click", () => setNoteOpen(elements.noteToggle.getAttribute("aria-expanded") !== "true"));
+elements.speciesNote.addEventListener("input", saveCurrentNote);
+elements.speciesNote.addEventListener("blur", flushNoteSave);
 $$('[data-taxonomy-all]').forEach(button => button.addEventListener("click", () => setTaxonomyGroup(button.dataset.taxonomyAll, true)));
 $$('[data-taxonomy-none]').forEach(button => button.addEventListener("click", () => setTaxonomyGroup(button.dataset.taxonomyNone, false)));
-$("#quit-button").addEventListener("click", () => { showView("setup"); updateHeader(); });
-$("#back-home").addEventListener("click", () => { showView("setup"); updateHeader(); });
+$("#quit-button").addEventListener("click", () => { flushNoteSave(); showView("setup"); updateHeader(); });
+$("#back-home").addEventListener("click", () => { flushNoteSave(); showView("setup"); updateHeader(); });
 elements.setupForm.addEventListener("change", updateAvailableCount);
+window.addEventListener("pagehide", flushNoteSave);
 document.addEventListener("keydown", event => {
   if (event.key === "Enter" && !elements.quiz.hidden && state.answered &&
       ![elements.nextButton, elements.previousButton].includes(document.activeElement)) {

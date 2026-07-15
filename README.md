@@ -23,6 +23,7 @@ Die Oberfläche, Artliste, Merkmale und bereits verwendete Fotos funktionieren o
 - Single Choice mit ausschließlich ähnlichen Arten bzw. gleichrangigen Tiergruppen
 - direkte Eingabe: deutscher oder wissenschaftlicher Name genügt
 - Pflanzen, Tierarten, Tiergruppen oder gemischte Runden
+- lokale Notizen und Markierungen pro Art bzw. Tiergruppe mit eigenem Quizfilter
 - frei wählbare Pflanzenfamilien und Tierordnungen
 - wechselnde Fundfotos über exakt aufgelöste iNaturalist-Taxon-IDs
 - mehrere Ansichten derselben Beobachtung bei Gräsern, Binsen, Seggen und Farnen

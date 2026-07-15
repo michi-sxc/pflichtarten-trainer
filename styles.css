@@ -258,6 +258,15 @@ select:focus, .input-answer input:focus { outline: 2px solid var(--rust); outlin
 .learning-note ul { margin: 0 0 18px; padding: 0; list-style: none; border-top: 1px solid var(--line); }
 .learning-note li { padding: 9px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: .7rem; line-height: 1.55; }
 .learning-note li strong { color: var(--ink); font-weight: 600; }
+.personal-study { padding: 14px 0 2px; border-top: 1px solid var(--line-dark); }
+.personal-study-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.mark-current { display: flex; align-items: center; gap: 9px; cursor: pointer; font-family: var(--mono); font-size: .72rem; }
+.mark-current input { width: 18px; height: 18px; accent-color: var(--rust); }
+.note-editor { display: grid; gap: 8px; margin-top: 14px; }
+.note-editor label { font-family: var(--mono); font-size: .68rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+.note-editor textarea { width: 100%; min-height: 86px; resize: vertical; padding: 10px; border: 1px solid var(--line-dark); border-radius: 0; background: transparent; color: var(--ink); font: .76rem/1.55 var(--mono); }
+.note-editor textarea:focus { outline: 2px solid var(--rust); outline-offset: 2px; }
+.note-editor small { color: var(--muted); font-size: .62rem; }
 
 .results-view { max-width: 720px; margin: 80px auto 0; padding: 44px 0 0; border-top: 3px double var(--ink); text-align: center; }
 .results-view h1 { font-size: clamp(2.6rem, 7vw, 5rem); }
