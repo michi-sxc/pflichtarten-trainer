@@ -3,17 +3,19 @@ const $$ = selector => [...document.querySelectorAll(selector)];
 
 const elements = {
   setup: $("#setup-view"), quiz: $("#quiz-view"), results: $("#results-view"),
+  browse: $("#browse-view"), statsView: $("#stats-view"),
   setupForm: $("#setup-form"), choiceAnswer: $("#choice-answer"), inputAnswer: $("#input-answer"),
   inputSubmit: $("#input-answer button[type='submit']"),
   germanInput: $("#german-input"), latinInput: $("#latin-input"), feedback: $("#feedback"),
   feedbackLabel: $("#feedback-label"), answerGerman: $("#answer-german"), answerLatin: $("#answer-latin"),
   hintButton: $("#hint-button"), hintText: $("#hint-text"), revealButton: $("#reveal-button"),
-  previousButton: $("#previous-button"), nextButton: $("#next-button"), newImage: $("#new-image"), image: $("#species-image"),
+  previousButton: $("#previous-button"), nextButton: $("#next-button"), newImage: $("#new-image"), expandImage: $("#expand-image"), image: $("#species-image"),
   imageLoader: $("#image-loader"), imageError: $("#image-error"), imageCredit: $("#image-credit"),
   sourceLink: $("#source-link"), questionKicker: $("#question-kicker"), questionTitle: $("#question-title"), progressText: $("#progress-text"),
   progressBar: $("#progress-bar"), scoreText: $("#score-text"), mastered: $("#mastered-count"),
   due: $("#due-count"), speciesCount: $("#species-count"), mistakesStart: $("#mistakes-start"),
   resultPercent: $("#result-percent"), resultDetail: $("#result-detail"), resultMessage: $("#result-message"),
+  resultTime: $("#result-time"),
   mistakeReview: $("#mistake-review"), mistakeList: $("#mistake-list"), repeatMistakes: $("#repeat-mistakes"),
   learningNote: $("#learning-note"), featureText: $("#feature-text"), focusText: $("#focus-text"),
   featuresTitle: $("#features-title"), comparisonBlock: $("#comparison-block"), comparisonList: $("#comparison-list"),
@@ -22,18 +24,41 @@ const elements = {
   plantTaxonomy: $("#plant-taxonomy"), animalTaxonomy: $("#animal-taxonomy"),
   plantTaxonomyList: $("#plant-taxonomy-list"), animalTaxonomyList: $("#animal-taxonomy-list"),
   markedOnly: $("#marked-only"), markedFilterCount: $("#marked-filter-count"), startButton: $("#start-button"),
-  markCurrent: $("#mark-current"), noteToggle: $("#note-toggle"), noteEditor: $("#note-editor"), speciesNote: $("#species-note")
+  markCurrent: $("#mark-current"), noteToggle: $("#note-toggle"), noteEditor: $("#note-editor"), speciesNote: $("#species-note"),
+  levelFilter: $("#level-filter"), inputFieldsLabel: $("#input-fields-label"), inputFields: $("#input-fields"),
+  sessionTimer: $("#session-timer"), quizStreak: $("#quiz-streak"),
+  streakDisplay: $("#streak-display"), streakCount: $("#streak-count"),
+  homeButton: $("#home-button"), browseButton: $("#browse-button"), statsButton: $("#stats-button"),
+  browseBack: $("#browse-back"), browseSearch: $("#browse-search"), browseGrid: $("#browse-grid"), browseMore: $("#browse-more"),
+  statsBack: $("#stats-back"), statTotal: $("#stat-total"), statMastered: $("#stat-mastered"),
+  statDue: $("#stat-due"), statAccuracy: $("#stat-accuracy"), statStreak: $("#stat-streak"),
+  weakestList: $("#weakest-list"), statsTbody: $("#stats-tbody"),
+  exportButton: $("#export-button"), importButton: $("#import-button"), importFile: $("#import-file"),
+  themeToggle: $("#theme-toggle"), imageViewer: $("#image-viewer"), imageViewerClose: $("#image-viewer-close"),
+  imageViewerImage: $("#image-viewer-image"), imageViewerLoader: $("#image-viewer-loader"),
+  imageViewerCredit: $("#image-viewer-credit"), imageViewerSource: $("#image-viewer-source")
 };
 
 const STORAGE_KEY = "pflichtarten-trainer-v1";
 const TAXON_CACHE_KEY = "pflichtarten-taxa-v1";
+const STREAK_KEY = "pflichtarten-streak-v1";
+const THEME_KEY = "pflichtarten-theme";
+const TAXON_CACHE_MAX = 500;
 let installPrompt;
 let noteSaveTimer;
+let sessionStart = 0;
+let sessionTimerId = null;
+let apiLastCall = 0;
+let apiGate = Promise.resolve();
+let viewerToken = 0;
+const taxonRequests = new Map();
+const API_MIN_GAP = 350; // ms between iNaturalist API calls
 const state = {
   stats: loadStats(), queue: [], index: 0, score: 0, mode: "choice", scope: "all",
   smart: true, answered: false, hintUsed: false, roundMistakes: [], imageToken: 0,
   recentImages: new Map(), responses: [], options: [], photos: [], taxa: loadTaxa(), prefetches: new Map(), roundToken: 0,
-  selectedTaxa: new Set(Object.values(TAXON_FILTERS).flat().map(taxon => taxon.key))
+  selectedTaxa: new Set(Object.values(TAXON_FILTERS).flat().map(taxon => taxon.key)),
+  inputFields: "both", streak: loadStreak(), correctStreak: 0
 };
 
 function loadStats() {
@@ -46,6 +71,29 @@ function saveStats() {
   catch { /* private mode can block storage, quiz still works */ }
 }
 
+function loadStreak() {
+  try { return JSON.parse(localStorage.getItem(STREAK_KEY)) || { count: 0, lastDate: "" }; }
+  catch { return { count: 0, lastDate: "" }; }
+}
+
+function saveStreak() {
+  try { localStorage.setItem(STREAK_KEY, JSON.stringify(state.streak)); }
+  catch { /* optional */ }
+}
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function updateStreak() {
+  const today = todayStr();
+  if (state.streak.lastDate === today) return;
+  const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  state.streak.count = state.streak.lastDate === yesterday ? state.streak.count + 1 : 1;
+  state.streak.lastDate = today;
+  saveStreak();
+}
+
 function loadTaxa() {
   try { return new Map(Object.entries(JSON.parse(localStorage.getItem(TAXON_CACHE_KEY)) || {})); }
   catch { return new Map(); }
@@ -53,6 +101,11 @@ function loadTaxa() {
 
 function saveTaxa() {
   try {
+    // evict oldest entries if cache too large
+    if (state.taxa.size > TAXON_CACHE_MAX) {
+      const excess = state.taxa.size - TAXON_CACHE_MAX;
+      for (const key of [...state.taxa.keys()].slice(0, excess)) state.taxa.delete(key);
+    }
     const compact = Object.fromEntries([...state.taxa].map(([id, taxon]) => [id, {
       id: taxon.id,
       default_photo: taxon.default_photo && {
@@ -76,6 +129,10 @@ function updateHeader() {
   elements.due.textContent = due;
   elements.mistakesStart.hidden = due === 0;
   elements.mistakesStart.textContent = `${due} Fehler wiederholen`;
+  if (state.streak.count > 0 && elements.streakDisplay) {
+    elements.streakDisplay.hidden = false;
+    elements.streakCount.textContent = state.streak.count;
+  }
   updateAvailableCount();
 }
 
@@ -83,12 +140,22 @@ function currentScope() {
   return new FormData(elements.setupForm).get("scope") || "all";
 }
 
+function levelFilterFn(item) {
+  const level = elements.levelFilter?.value || "all";
+  if (level === "all") return true;
+  const stat = getStat(item);
+  if (level === "new") return stat.seen === 0;
+  if (level === "unsure") return stat.seen > 0 && stat.level <= 2;
+  if (level === "secure") return stat.level >= 3;
+  return true;
+}
+
 function scopedSpecies(scope = currentScope(), markedOnly = elements.markedOnly.checked) {
   const inScope = item => scope === "all" ||
     (scope === "taxon" ? item.kind === "taxon" : item.group === scope && item.kind === "species");
   return SPECIES.filter(item => inScope(item) &&
     (item.kind === "taxon" || state.selectedTaxa.has(TAXONOMY_BY_ID[item.id]?.key)) &&
-    (!markedOnly || getStat(item).marked));
+    (!markedOnly || getStat(item).marked) && levelFilterFn(item));
 }
 
 function renderTaxonomyFilters() {
@@ -184,6 +251,7 @@ function startQuiz({ mistakesOnly = false, species = null } = {}) {
   state.scope = form.get("scope") || "all";
   state.mode = form.get("mode") || "choice";
   state.smart = form.get("smart") === "on";
+  state.inputFields = form.get("inputFields") || "both";
   const pool = species || scopedSpecies(state.scope).filter(item => !mistakesOnly || getStat(item).mistake);
   if (!pool.length) return;
   const countValue = form.get("count") || "20";
@@ -191,21 +259,33 @@ function startQuiz({ mistakesOnly = false, species = null } = {}) {
   state.queue = state.smart ? weightedSample(pool, count) : shuffle(pool).slice(0, count);
   state.index = 0;
   state.score = 0;
+  state.correctStreak = 0;
+  updateQuizStreak();
   state.roundMistakes = [];
   state.responses = [];
   state.options = [];
   state.photos = [];
   state.prefetches.clear();
   state.roundToken++;
+  startSessionTimer();
   showView("quiz");
   renderQuestion();
 }
 
 function showView(name) {
-  elements.setup.hidden = name !== "setup";
-  elements.quiz.hidden = name !== "quiz";
-  elements.results.hidden = name !== "results";
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  for (const view of [elements.setup, elements.quiz, elements.results, elements.browse, elements.statsView]) {
+    view.hidden = true;
+  }
+  const target = name === "quiz" ? elements.quiz : name === "results" ? elements.results :
+    name === "browse" ? elements.browse : name === "stats" ? elements.statsView : elements.setup;
+  target.hidden = false;
+  const activeMenu = name === "browse" ? elements.browseButton : name === "stats" ? elements.statsButton : elements.homeButton;
+  for (const button of [elements.homeButton, elements.browseButton, elements.statsButton]) {
+    if (button === activeMenu) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  }
+  const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
 }
 
 function renderQuestion() {
@@ -214,6 +294,7 @@ function renderQuestion() {
   const response = state.responses[state.index];
   state.answered = Boolean(response);
   state.hintUsed = response?.hintUsed || false;
+  state.correctStreak = response?.streak ?? state.responses[state.index - 1]?.streak ?? 0;
   elements.feedback.hidden = true;
   elements.learningNote.hidden = true;
   elements.hintText.hidden = true;
@@ -223,9 +304,17 @@ function renderQuestion() {
   elements.questionKicker.textContent = species.group === "plant" ? "Pflanze bestimmen" : "Tier bestimmen";
   elements.progressText.textContent = `${state.index + 1} / ${state.queue.length}`;
   elements.scoreText.textContent = `${state.score} richtig`;
+  updateQuizStreak();
   elements.progressBar.style.width = `${(state.index / state.queue.length) * 100}%`;
   elements.choiceAnswer.hidden = state.mode !== "choice";
   elements.inputAnswer.hidden = state.mode !== "input";
+  if (state.mode === "input") {
+    const showGerman = state.inputFields !== "latin";
+    const showLatin = state.inputFields !== "german";
+    elements.germanInput.parentElement.hidden = !showGerman;
+    elements.latinInput.parentElement.hidden = !showLatin;
+    if (!showGerman && !state.answered) requestAnimationFrame(() => elements.latinInput.focus());
+  }
   elements.germanInput.value = response?.german || "";
   elements.latinInput.value = response?.latin || "";
   elements.germanInput.disabled = state.answered;
@@ -321,8 +410,8 @@ function gradeInput(event) {
   const species = state.queue[state.index];
   const germanValue = normalize(elements.germanInput.value);
   const latinValue = normalize(elements.latinInput.value);
-  const germanProvided = Boolean(germanValue);
-  const latinProvided = Boolean(latinValue);
+  const germanProvided = state.inputFields !== "latin" && Boolean(germanValue);
+  const latinProvided = state.inputFields !== "german" && Boolean(latinValue);
   const germanOk = germanProvided && acceptedNames(species.german, species.germanAliases).includes(germanValue);
   const latinOk = latinProvided && acceptedNames(species.latin, species.latinAliases).includes(latinValue);
   const detail = {
@@ -337,11 +426,18 @@ function gradeInput(event) {
   recordAnswer(germanOk || latinOk, detail);
 }
 
+function updateQuizStreak() {
+  elements.quizStreak.textContent = `Serie ${state.correctStreak}`;
+  elements.quizStreak.classList.toggle("active", state.correctStreak > 0);
+}
+
 function recordAnswer(correct, detail = {}) {
   if (state.responses[state.index]) return;
   state.answered = true;
+  state.correctStreak = correct ? state.correctStreak + 1 : 0;
+  updateQuizStreak();
   const species = state.queue[state.index];
-  state.responses[state.index] = { correct, hintUsed: state.hintUsed, ...detail };
+  state.responses[state.index] = { correct, hintUsed: state.hintUsed, streak: state.correctStreak, ...detail };
   const stat = getStat(species);
   stat.seen++;
   if (correct) {
@@ -357,6 +453,7 @@ function recordAnswer(correct, detail = {}) {
   }
   state.stats[species.id] = stat;
   saveStats();
+  updateStreak();
   updateHeader();
   showFeedback(correct, species, true);
 }
@@ -386,7 +483,7 @@ function showLearningNote(species) {
   elements.featuresTitle.textContent = focus ? "Merkmalsfokus" : "Erkennungsmerkmale";
   elements.focusText.textContent = focus;
   elements.focusText.hidden = !focus;
-  elements.featureText.textContent = FEATURES[species.id];
+  elements.featureText.textContent = FEATURES[species.id] || "Keine Merkmale hinterlegt.";
   const alternatives = state.mode === "choice"
     ? (state.options[state.index] || []).map(id => SPECIES.find(item => item.id === id)).filter(item => item && item.id !== species.id)
     : [];
@@ -471,6 +568,13 @@ function imageQuery(species) {
 }
 
 async function fetchWithTimeout(url, timeout = 6500) {
+  const turn = apiGate.then(async () => {
+    const wait = Math.max(0, apiLastCall + API_MIN_GAP - Date.now());
+    if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+    apiLastCall = Date.now();
+  });
+  apiGate = turn.catch(() => {});
+  await turn;
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeout);
   try { return await fetch(url, { signal: controller.signal }); }
@@ -482,6 +586,14 @@ function largerPhoto(url) {
   return url.replace(/\/(square|small|thumb|medium|large)\./, `/${size}.`);
 }
 
+function browsePhotoUrl(url) {
+  return url.replace(/\/(square|small|thumb|medium|large)\./, "/medium.");
+}
+
+function fullPhotoUrl(url) {
+  return url.replace(/\/(square|small|thumb|medium|large)\./, "/large.");
+}
+
 function rememberImage(species, url) {
   const recent = state.recentImages.get(species.id) || [];
   state.recentImages.set(species.id, [...recent.filter(item => item !== url), url].slice(-8));
@@ -491,7 +603,7 @@ function cleanTaxonName(value) {
   return value.replace(/\b(agg|kl|f)\.?\b/gi, " ").replace(/[^\p{L}-]+/gu, " ").trim().toLowerCase();
 }
 
-async function resolveTaxon(species) {
+async function fetchResolvedTaxon(species) {
   if (state.taxa.has(species.id)) return state.taxa.get(species.id);
   const names = [...new Set([imageQuery(species), species.latin, ...species.latinAliases].map(name =>
     name.replace(/\b(agg|kl|f)\.?\b/gi, " ").replace(/\s+/g, " ").trim()))];
@@ -510,6 +622,14 @@ async function resolveTaxon(species) {
     }
   }
   throw new Error("No exact iNaturalist taxon");
+}
+
+function resolveTaxon(species) {
+  if (state.taxa.has(species.id)) return Promise.resolve(state.taxa.get(species.id));
+  if (taxonRequests.has(species.id)) return taxonRequests.get(species.id);
+  const request = fetchResolvedTaxon(species).finally(() => taxonRequests.delete(species.id));
+  taxonRequests.set(species.id, request);
+  return request;
 }
 
 async function fetchINaturalist(species) {
@@ -621,7 +741,49 @@ function displayPhoto(photo) {
   elements.imageLoader.hidden = true;
   elements.imageCredit.textContent = current.credit;
   elements.sourceLink.href = photo.link;
-  elements.newImage.textContent = photo.variantIndex < (photo.variants?.length || 1) - 1 ? "Nächste Ansicht" : "Anderes Foto";
+  const action = photo.variantIndex < (photo.variants?.length || 1) - 1 ? "Nächste Ansicht" : "Anderes Foto";
+  elements.newImage.setAttribute("aria-label", action);
+  elements.newImage.title = action;
+  elements.expandImage.disabled = false;
+}
+
+function openImageViewer({ url, alt, credit = "", link = "https://www.inaturalist.org" }) {
+  if (!url) return;
+  const token = ++viewerToken;
+  elements.imageViewerImage.src = url;
+  elements.imageViewerImage.alt = alt;
+  elements.imageViewerCredit.textContent = credit;
+  elements.imageViewerSource.href = link;
+  elements.imageViewerLoader.hidden = true;
+  if (typeof elements.imageViewer.showModal === "function") elements.imageViewer.showModal();
+  else elements.imageViewer.setAttribute("open", "");
+
+  const fullUrl = fullPhotoUrl(url);
+  if (fullUrl === url) return;
+  const full = new Image();
+  elements.imageViewerLoader.hidden = false;
+  full.onload = () => {
+    if (token !== viewerToken || !elements.imageViewer.open) return;
+    elements.imageViewerImage.src = fullUrl;
+    elements.imageViewerLoader.hidden = true;
+  };
+  full.onerror = () => { if (token === viewerToken) elements.imageViewerLoader.hidden = true; };
+  full.src = fullUrl;
+}
+
+function closeImageViewer() {
+  viewerToken++;
+  if (typeof elements.imageViewer.close === "function") elements.imageViewer.close();
+  else elements.imageViewer.removeAttribute("open");
+  elements.imageViewerImage.removeAttribute("src");
+}
+
+function openQuizImage() {
+  const photo = state.photos[state.index];
+  const current = photo?.variants?.[photo.variantIndex] || photo;
+  if (!current) return;
+  const species = state.queue[state.index];
+  openImageViewer({ url: current.url, alt: species.german, credit: current.credit, link: photo.link });
 }
 
 async function nextImage() {
@@ -648,6 +810,7 @@ async function loadImage(species = state.queue[state.index], force = false) {
   elements.imageCredit.textContent = "Fotoquelle wird geladen ...";
   elements.sourceLink.href = "https://www.inaturalist.org";
   elements.newImage.disabled = true;
+  elements.expandImage.disabled = true;
   const cached = state.photos[questionIndex];
   if (cached && !force) {
     displayPhoto(cached);
@@ -693,11 +856,18 @@ function preload(url, priority = "auto") {
 }
 
 function showResults() {
+  stopSessionTimer();
   showView("results");
   const total = state.queue.length;
   const percent = total ? Math.round(state.score / total * 100) : 0;
   elements.resultPercent.textContent = `${percent} %`;
   elements.resultDetail.textContent = `${state.score} von ${total} Fragen richtig`;
+  if (sessionStart) {
+    const secs = Math.round((Date.now() - sessionStart) / 1000);
+    elements.resultTime.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")} min`;
+  } else {
+    elements.resultTime.textContent = "";
+  }
   elements.resultMessage.textContent = percent >= 90 ? "Sehr sicher. Eine neue Runde hält die Namen frisch." :
     percent >= 70 ? "Solide Runde. Wiederhole jetzt am besten nur die Fehler." :
     "Guter Anfang. Kurze Runden mit Fehlerwiederholung bringen am meisten.";
@@ -716,6 +886,69 @@ function escapeHtml(value) {
   return value.replace(/[&<>"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" })[character]);
 }
 
+function startSessionTimer() {
+  sessionStart = Date.now();
+  if (sessionTimerId) clearInterval(sessionTimerId);
+  sessionTimerId = setInterval(() => {
+    const secs = Math.floor((Date.now() - sessionStart) / 1000);
+    elements.sessionTimer.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+  }, 500);
+}
+
+function stopSessionTimer() {
+  if (sessionTimerId) { clearInterval(sessionTimerId); sessionTimerId = null; }
+  if (sessionStart) {
+    const secs = Math.floor((Date.now() - sessionStart) / 1000);
+    elements.sessionTimer.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+  }
+}
+
+function exportProgress() {
+  const data = {
+    stats: state.stats,
+    streak: state.streak,
+    taxa: Object.fromEntries(state.taxa.entries()),
+    exported: new Date().toISOString()
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `pflichtarten-lernstand-${todayStr()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importProgress(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (data.stats) { state.stats = data.stats; saveStats(); }
+      if (data.streak) { state.streak = data.streak; saveStreak(); }
+      if (data.taxa) { state.taxa = new Map(Object.entries(data.taxa)); saveTaxa(); }
+      updateHeader();
+      alert("Lernstand erfolgreich importiert.");
+    } catch { alert("Datei konnte nicht gelesen werden."); }
+  };
+  reader.readAsText(file);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem(THEME_KEY, theme);
+  if (elements.themeToggle) elements.themeToggle.textContent = theme === "dark" ? "Light Mode" : "Dark Mode";
+}
+
+function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved) applyTheme(saved);
+  else if (elements.themeToggle) {
+    const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    elements.themeToggle.textContent = dark ? "Light Mode" : "Dark Mode";
+  }
+}
+
 elements.setupForm.addEventListener("submit", event => { event.preventDefault(); startQuiz(); });
 elements.inputAnswer.addEventListener("submit", gradeInput);
 elements.hintButton.addEventListener("click", revealHint);
@@ -723,6 +956,17 @@ elements.revealButton.addEventListener("click", revealAnswer);
 elements.previousButton.addEventListener("click", previousQuestion);
 elements.nextButton.addEventListener("click", nextQuestion);
 elements.newImage.addEventListener("click", nextImage);
+elements.expandImage.addEventListener("click", openQuizImage);
+elements.image.addEventListener("click", openQuizImage);
+elements.imageViewerClose.addEventListener("click", closeImageViewer);
+elements.imageViewer.addEventListener("click", event => { if (event.target === elements.imageViewer) closeImageViewer(); });
+elements.imageViewer.addEventListener("close", () => {
+  viewerToken++;
+  elements.imageViewerImage.removeAttribute("src");
+});
+elements.imageViewer.querySelector(".image-viewer-stage").addEventListener("click", event => {
+  if (event.target === event.currentTarget) closeImageViewer();
+});
 elements.mistakesStart.addEventListener("click", () => startQuiz({ mistakesOnly: true }));
 elements.taxonomyToggle.addEventListener("click", toggleTaxonomyFilter);
 elements.markCurrent.addEventListener("change", () => {
@@ -734,17 +978,52 @@ elements.speciesNote.addEventListener("input", saveCurrentNote);
 elements.speciesNote.addEventListener("blur", flushNoteSave);
 $$('[data-taxonomy-all]').forEach(button => button.addEventListener("click", () => setTaxonomyGroup(button.dataset.taxonomyAll, true)));
 $$('[data-taxonomy-none]').forEach(button => button.addEventListener("click", () => setTaxonomyGroup(button.dataset.taxonomyNone, false)));
-$("#quit-button").addEventListener("click", () => { flushNoteSave(); showView("setup"); updateHeader(); });
-$("#back-home").addEventListener("click", () => { flushNoteSave(); showView("setup"); updateHeader(); });
+$("#quit-button").addEventListener("click", () => { flushNoteSave(); stopSessionTimer(); showView("setup"); updateHeader(); });
+$("#back-home").addEventListener("click", () => { flushNoteSave(); stopSessionTimer(); showView("setup"); updateHeader(); });
+elements.homeButton.addEventListener("click", () => { flushNoteSave(); stopSessionTimer(); showView("setup"); updateHeader(); });
 elements.setupForm.addEventListener("change", updateAvailableCount);
 window.addEventListener("pagehide", flushNoteSave);
+
+// show/hide input fields sub-mode based on answer mode
+$$('input[name="mode"]').forEach(radio => radio.addEventListener("change", () => {
+  elements.inputFieldsLabel.hidden = radio.value !== "input" || !radio.checked;
+}));
+
+// keyboard shortcuts: A-D / 1-4 for single choice
 document.addEventListener("keydown", event => {
-  if (event.key === "Enter" && !elements.quiz.hidden && state.answered &&
-      ![elements.nextButton, elements.previousButton].includes(document.activeElement)) {
-    event.preventDefault();
-    nextQuestion();
+  if (elements.quiz.hidden || state.mode !== "choice" || state.answered) {
+    // Enter to proceed when answered
+    if (event.key === "Enter" && !elements.quiz.hidden && state.answered &&
+        ![elements.nextButton, elements.previousButton].includes(document.activeElement)) {
+      event.preventDefault();
+      nextQuestion();
+    }
+    return;
+  }
+  const keys = ["a", "b", "c", "d", "1", "2", "3", "4"];
+  const idx = keys.indexOf(event.key.toLowerCase());
+  if (idx >= 0) {
+    const optionIndex = idx % 4;
+    const button = elements.choiceAnswer.querySelectorAll("button")[optionIndex];
+    if (button) { event.preventDefault(); button.click(); }
   }
 });
+
+// export / import
+elements.exportButton.addEventListener("click", exportProgress);
+elements.importButton.addEventListener("click", () => elements.importFile.click());
+elements.importFile.addEventListener("change", () => {
+  if (elements.importFile.files[0]) importProgress(elements.importFile.files[0]);
+});
+
+// dark mode toggle
+elements.themeToggle.addEventListener("click", () => {
+  const current = document.documentElement.getAttribute("data-theme");
+  const isDark = current === "dark" || (!current && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  applyTheme(isDark ? "light" : "dark");
+});
+
+// browse / stats navigation handled by extras.js
 
 const installButton = $("#install-button");
 window.addEventListener("beforeinstallprompt", event => {
@@ -770,4 +1049,5 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
 }
 
 renderTaxonomyFilters();
+initTheme();
 updateHeader();

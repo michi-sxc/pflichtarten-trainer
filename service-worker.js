@@ -1,4 +1,4 @@
-const VERSION = "pflichtarten-v7";
+const VERSION = "pflichtarten-v11";
 const SHELL_CACHE = `${VERSION}-shell`;
 const DATA_CACHE = `${VERSION}-data`;
 const PHOTO_CACHE = `${VERSION}-photos`;
@@ -6,12 +6,13 @@ const BASE = new URL("./", self.location);
 const shellFiles = [
   "./",
   "./index.html",
-  "./styles.css?v=11",
+  "./styles.css?v=15",
   "./species.js?v=3",
   "./taxonomy.js?v=1",
-  "./features.js?v=1",
+  "./features.js?v=2",
   "./features-extra.js?v=1",
-  "./app.js?v=11",
+  "./app.js?v=15",
+  "./extras.js?v=4",
   "./manifest.webmanifest?v=1",
   "./icons/icon.svg",
   "./icons/icon-180.png",
@@ -86,5 +87,8 @@ self.addEventListener("fetch", event => {
     return;
   }
 
-  event.respondWith(caches.match(request).then(cached => cached || put(SHELL_CACHE, request, fetch(request))));
+  // stale-while-revalidate: serve cache instantly, update in background
+  const cachedPromise = caches.match(request);
+  const networkPromise = fetch(request).then(r => { put(SHELL_CACHE, request, r); return r; }).catch(() => null);
+  event.respondWith(cachedPromise.then(c => c || networkPromise));
 });

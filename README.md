@@ -27,6 +27,7 @@ Die Oberfläche, Artliste, Merkmale und bereits verwendete Fotos funktionieren o
 - frei wählbare Pflanzenfamilien und Tierordnungen
 - wechselnde Fundfotos über exakt aufgelöste iNaturalist-Taxon-IDs
 - mehrere Ansichten derselben Beobachtung bei Gräsern, Binsen, Seggen und Farnen
+- schnelle Arten-Suche und unbeschnittene Bild-Großansicht in Quiz und Artenliste
 - Wikimedia Commons als Bild-Fallback
 - Hinweise, Fehlerwiederholung und lokal gespeicherter Lernstand
 - Rücknavigation zur vorherigen Frage mit unverändertem Foto

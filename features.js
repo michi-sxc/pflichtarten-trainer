@@ -188,7 +188,7 @@ const FEATURES = {
   "plant-186": "feines Gras; kurze Ligula; locker rötlich-violette Rispe; trockene saure Rasen",
   "plant-187": "kriechende Stolonen; lange Ligula; helle offene Rispe; nasse Wiesen, Ufer",
   "plant-188": "hohes Obergras; lockere Hafer-Rispe; breite Blätter; nährstoffreiche Wiesen",
-  "plant-189": "dichte harte Horste; sehr raue Blätter; große luftige Rispe;…1543 tokens truncated…s",
+  "plant-189": "dichte harte Horste; sehr raue Blätter; große luftige Rispe; nasse Wiesen",
   "animal-51": "dunkler; dunkler Schnabel mit orange Band; orange Beine; Zug/Wintergast",
   "animal-52": "weiße Stirnblässe; schwarze Bauchbinden; orange Beine; Wintergans",
   "animal-53": "Männchen grüner Kopf, gelber Schnabel; Weibchen braun; blaues Spiegelfeld",

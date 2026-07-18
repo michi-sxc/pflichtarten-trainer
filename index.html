@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f2eddf">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f2eddf" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1a1815" media="(prefers-color-scheme: dark)">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -14,16 +16,39 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://api.inaturalist.org">
+  <link rel="dns-prefetch" href="https://api.inaturalist.org">
+  <link rel="dns-prefetch" href="https://static.inaturalist.org">
+  <link rel="dns-prefetch" href="https://commons.wikimedia.org">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=11">
+  <link rel="stylesheet" href="styles.css?v=15">
+  <script defer src="species.js?v=3"></script>
+  <script defer src="taxonomy.js?v=1"></script>
+  <script defer src="features.js?v=2"></script>
+  <script defer src="features-extra.js?v=1"></script>
+  <script defer src="app.js?v=15"></script>
+  <script defer src="extras.js?v=4"></script>
 </head>
 <body>
-  <main>
-    <div class="learning-stats" aria-label="Lernstand">
-      <span class="stats-label">Lernstand</span>
-      <span><strong id="mastered-count">0</strong> sicher</span>
-      <span><strong id="due-count">0</strong> üben</span>
+  <header class="app-header">
+    <div class="app-bar">
+      <button id="home-button" class="app-brand" type="button" aria-current="page">Pflichtarten</button>
+      <nav class="app-menu" aria-label="Hauptnavigation">
+        <button id="browse-button" type="button">Arten</button>
+        <button id="stats-button" type="button">Lernstand</button>
+        <button id="export-button" type="button">Export</button>
+        <button id="import-button" type="button">Import</button>
+        <button id="theme-toggle" type="button">Dark Mode</button>
+      </nav>
+      <div class="app-progress" aria-label="Kurzer Lernstand">
+        <span><strong id="mastered-count">0</strong> sicher</span>
+        <span><strong id="due-count">0</strong> üben</span>
+        <span id="streak-display" hidden><strong id="streak-count">0</strong> Tage</span>
+      </div>
+      <input id="import-file" type="file" accept=".json" hidden>
     </div>
+  </header>
+  <main>
     <section id="setup-view" class="view setup-view" aria-labelledby="setup-title">
       <div class="intro">
         <p class="eyebrow">Freiberger Pflichtartenheft</p>
@@ -32,7 +57,7 @@
       </div>
 
       <form id="setup-form" class="setup-card">
-        <p class="setup-index" aria-hidden="true">Einstellungen / 01</p>
+        <p class="setup-index">Quiz einstellen</p>
         <fieldset>
           <legend>Was möchtest du lernen?</legend>
           <div class="segmented" data-field="scope">
@@ -65,10 +90,20 @@
           </div>
         </div>
 
-        <label class="check-label marked-only">
-          <input id="marked-only" type="checkbox" name="markedOnly">
-          <span><strong>Nur Markierte</strong><small id="marked-filter-count">0 markiert</small></span>
-        </label>
+        <div class="form-row">
+          <label class="check-label marked-only">
+            <input id="marked-only" type="checkbox" name="markedOnly">
+            <span><strong>Nur Markierte</strong><small id="marked-filter-count">0 markiert</small></span>
+          </label>
+          <label class="select-label level-select-label"><span>Level</span>
+            <select id="level-filter" name="level">
+              <option value="all">Alle Level</option>
+              <option value="unsure">Unsicher (≤2)</option>
+              <option value="secure">Sicher (≥3)</option>
+              <option value="new">Noch nie gesehen</option>
+            </select>
+          </label>
+        </div>
 
         <fieldset>
           <legend>Antwortmodus</legend>
@@ -82,6 +117,14 @@
               <span><strong>Direkte Eingabe</strong><small>Deutschen oder wissenschaftlichen Namen selbst nennen</small></span>
             </label>
           </div>
+          <label id="input-fields-label" class="select-label compact" hidden>
+            Eingabefelder
+            <select id="input-fields" name="inputFields">
+              <option value="both">Deutsch + Latein</option>
+              <option value="german">Nur Deutsch</option>
+              <option value="latin">Nur Latein</option>
+            </select>
+          </label>
         </fieldset>
 
         <div class="form-row">
@@ -111,6 +154,8 @@
           <button id="quit-button" class="text-button" type="button">Beenden</button>
           <button id="previous-button" class="text-button" type="button" disabled>Vorige Frage</button>
         </div>
+        <span id="session-timer" class="session-timer" aria-label="Zeit">0:00</span>
+        <span id="quiz-streak" class="quiz-streak" aria-live="polite">Serie 0</span>
         <div class="progress-wrap">
           <div class="progress-label"><span id="progress-text">1 / 20</span><span id="score-text">0 richtig</span></div>
           <div class="progress-track" aria-hidden="true"><span id="progress-bar"></span></div>
@@ -125,7 +170,10 @@
             <strong>Foto konnte nicht geladen werden.</strong>
             <span>Prüfe deine Internetverbindung oder lade ein neues.</span>
           </div>
-          <button id="new-image" class="image-action" type="button">Anderes Foto</button>
+          <div class="image-tools" aria-label="Bildsteuerung">
+            <button id="new-image" class="image-tool" type="button" aria-label="Anderes Foto" title="Anderes Foto"><span aria-hidden="true">↻</span></button>
+            <button id="expand-image" class="image-tool" type="button" aria-label="Bild vergrößern" title="Bild vergrößern"><span aria-hidden="true">⛶</span></button>
+          </div>
         </div>
         <div class="credit-row">
           <span id="image-credit">Fotoquelle: iNaturalist</span>
@@ -186,7 +234,7 @@
     <section id="results-view" class="view results-view" aria-labelledby="results-title" hidden>
       <p class="eyebrow">Runde beendet</p>
       <h1 id="results-title">Dein Ergebnis</h1>
-      <div class="result-score"><strong id="result-percent">0 %</strong><span id="result-detail"></span></div>
+      <div class="result-score"><strong id="result-percent">0 %</strong><span id="result-detail"></span><span id="result-time" class="result-time"></span></div>
       <div id="result-message" class="result-message"></div>
       <div id="mistake-review" class="mistake-review" hidden>
         <h2>Noch einmal ansehen</h2>
@@ -197,16 +245,73 @@
         <button id="back-home" class="button subtle" type="button">Neue Runde</button>
       </div>
     </section>
+
+    <section id="browse-view" class="view browse-view" hidden>
+      <div class="browse-header">
+        <button id="browse-back" class="text-button" type="button">Zurück</button>
+        <h1>Arten</h1>
+        <input id="browse-search" type="search" placeholder="Suchen ..." autocomplete="off">
+      </div>
+      <div class="browse-filters">
+        <button class="browse-filter active" data-filter="all" type="button">Alle</button>
+        <button class="browse-filter" data-filter="plant" type="button">Pflanzen</button>
+        <button class="browse-filter" data-filter="animal" type="button">Tiere</button>
+        <button class="browse-filter" data-filter="taxon" type="button">Tiergruppen</button>
+        <button class="browse-filter" data-filter="marked" type="button">Markierte</button>
+      </div>
+      <div id="browse-grid" class="browse-grid"></div>
+      <button id="browse-more" class="button subtle wide" type="button" hidden>Mehr laden</button>
+    </section>
+
+    <section id="stats-view" class="view stats-view" hidden>
+      <div class="stats-header">
+        <button id="stats-back" class="text-button" type="button">Zurück</button>
+        <h1>Lernstand</h1>
+      </div>
+      <div class="stats-summary">
+        <div class="stat-card"><strong id="stat-total">0</strong><span>gesehen</span></div>
+        <div class="stat-card"><strong id="stat-mastered">0</strong><span>sicher</span></div>
+        <div class="stat-card"><strong id="stat-due">0</strong><span>üben</span></div>
+        <div class="stat-card"><strong id="stat-accuracy">0 %</strong><span>Genauigkeit</span></div>
+      </div>
+      <p id="stat-streak" class="stats-streak" hidden></p>
+      <div class="stats-weakest">
+        <h2>Schwächste Arten</h2>
+        <ul id="weakest-list"></ul>
+      </div>
+      <div class="stats-table-wrap">
+        <h2>Alle Arten</h2>
+        <table class="stats-table">
+          <thead><tr>
+            <th aria-sort="ascending"><button type="button" data-sort="name">Art <span aria-hidden="true">↑</span></button></th>
+            <th><button type="button" data-sort="level">Level <span aria-hidden="true"></span></button></th>
+            <th><button type="button" data-sort="seen">Gesehen <span aria-hidden="true"></span></button></th>
+            <th><button type="button" data-sort="correct">Richtig <span aria-hidden="true"></span></button></th>
+            <th><button type="button" data-sort="wrong">Falsch <span aria-hidden="true"></span></button></th>
+          </tr></thead>
+          <tbody id="stats-tbody"></tbody>
+        </table>
+      </div>
+    </section>
   </main>
+
+  <dialog id="image-viewer" class="image-viewer" aria-label="Bild in Großansicht">
+    <button id="image-viewer-close" class="image-viewer-close" type="button" aria-label="Großansicht schließen" title="Schließen">×</button>
+    <figure>
+      <div class="image-viewer-stage">
+        <span id="image-viewer-loader">Großansicht lädt …</span>
+        <img id="image-viewer-image" alt="" decoding="async">
+      </div>
+      <figcaption>
+        <span id="image-viewer-credit"></span>
+        <a id="image-viewer-source" href="https://www.inaturalist.org" target="_blank" rel="noreferrer">Quelle öffnen</a>
+      </figcaption>
+    </figure>
+  </dialog>
 
   <footer>
     <span>Arten und Tiergruppen nach dem Freiberger Pflichtartenheft, 12. Auflage 2020. Fotos von iNaturalist-Mitwirkenden.</span>
     <button id="install-button" class="footer-install" type="button" hidden>Auf diesem Gerät installieren</button>
   </footer>
-  <script src="species.js?v=3"></script>
-  <script src="taxonomy.js?v=1"></script>
-  <script src="features.js?v=1"></script>
-  <script src="features-extra.js?v=1"></script>
-  <script src="app.js?v=11"></script>
 </body>
 </html>
