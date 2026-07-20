@@ -691,6 +691,28 @@ function resolveTaxon(species) {
   return request;
 }
 
+function taxonPhoto(taxon) {
+  if (!taxon.default_photo?.url) return null;
+  return {
+    url: largerPhoto(taxon.default_photo.medium_url || taxon.default_photo.url),
+    credit: taxon.default_photo.attribution || "iNaturalist-Mitwirkende",
+    link: `https://www.inaturalist.org/taxa/${taxon.id}`
+  };
+}
+
+function observationPhoto(observation, detailed) {
+  const variants = observation.photos.slice(0, detailed ? 4 : 1).map(photo => ({
+    url: largerPhoto(photo.url),
+    credit: photo.attribution || "iNaturalist-Mitwirkende"
+  }));
+  return {
+    ...variants[0],
+    variants,
+    variantIndex: 0,
+    link: observation.uri || `https://www.inaturalist.org/observations/${observation.id}`
+  };
+}
+
 async function fetchINaturalist(species) {
   const taxon = await resolveTaxon(species);
   const params = new URLSearchParams({
@@ -712,26 +734,17 @@ async function fetchINaturalist(species) {
       : observations;
     const picked = candidates.find(item => !recent.includes(largerPhoto(item.photos[0].url))) || candidates[0];
     if (picked) {
-      const variants = picked.photos.slice(0, detailed ? 4 : 1).map(photo => ({
-        url: largerPhoto(photo.url),
-        credit: photo.attribution || "iNaturalist-Mitwirkende"
-      }));
-      return {
-        ...variants[0],
-        variants,
-        variantIndex: 0,
-        link: picked.uri || `https://www.inaturalist.org/observations/${picked.id}`
-      };
+      const photo = observationPhoto(picked, detailed);
+      const fallbacks = candidates.filter(item => item !== picked).slice(0, 2).map(item => observationPhoto(item, false));
+      const fallback = taxonPhoto(taxon);
+      if (fallback) fallbacks.push(fallback);
+      // dead CDN files happen, keep verified alternates from the same API response
+      photo.fallbacks = [...new Map(fallbacks.filter(item => item.url !== photo.url).map(item => [item.url, item])).values()];
+      return photo;
     }
   }
-  if (taxon.default_photo?.url) {
-    const url = largerPhoto(taxon.default_photo.medium_url || taxon.default_photo.url);
-    return {
-      url,
-      credit: taxon.default_photo.attribution || "iNaturalist-Mitwirkende",
-      link: `https://www.inaturalist.org/taxa/${taxon.id}`
-    };
-  }
+  const fallback = taxonPhoto(taxon);
+  if (fallback) return fallback;
   throw new Error("No iNaturalist photo");
 }
 
@@ -765,17 +778,40 @@ async function fetchCommons(species) {
   return { url: info.thumburl, credit: `${artist}${license}`, link: info.descriptionurl };
 }
 
-async function fetchPhoto(species) {
-  try { return await fetchINaturalist(species); }
-  catch { return fetchCommons(species); }
+function firstUsablePhoto(candidates, priority) {
+  return new Promise((resolve, reject) => {
+    let remaining = candidates.length;
+    let lastError = new Error("No usable photo");
+    if (!remaining) return reject(lastError);
+    for (const candidate of candidates) {
+      preload(candidate.url, priority, 7000).then(() => resolve(candidate)).catch(error => {
+        lastError = error;
+        if (--remaining === 0) reject(lastError);
+      });
+    }
+  });
+}
+
+async function verifyPhoto(photo, priority) {
+  try {
+    await preload(photo.url, priority, 7000);
+    return photo;
+  } catch (error) {
+    if (!photo.fallbacks?.length) throw error;
+    return firstUsablePhoto(photo.fallbacks, priority);
+  }
+}
+
+async function fetchPhoto(species, priority = "auto") {
+  try { return await verifyPhoto(await fetchINaturalist(species), priority); }
+  catch { return verifyPhoto(await fetchCommons(species), priority); }
 }
 
 function prefetchImage(index) {
   if (index >= state.queue.length || state.photos[index] || state.prefetches.has(index)) return;
   const species = state.queue[index];
   const roundToken = state.roundToken;
-  const task = fetchPhoto(species).then(async photo => {
-    await preload(photo.url, "low");
+  const task = fetchPhoto(species, "low").then(photo => {
     if (roundToken === state.roundToken && state.queue[index]?.id === species.id) state.photos[index] = photo;
     return photo;
   }).catch(() => null);
@@ -879,9 +915,7 @@ async function loadImage(species = state.queue[state.index], force = false) {
   }
   try {
     let photo = !force ? state.photos[questionIndex] || await state.prefetches.get(questionIndex) : null;
-    if (!photo) photo = await fetchPhoto(species);
-    if (token !== state.imageToken) return;
-    await preload(photo.url, "high");
+    if (!photo) photo = await fetchPhoto(species, "high");
     if (token !== state.imageToken) return;
     rememberImage(species, photo.url);
     state.photos[questionIndex] = photo;
@@ -898,14 +932,14 @@ async function loadImage(species = state.queue[state.index], force = false) {
   }
 }
 
-function preload(url, priority = "auto") {
+function preload(url, priority = "auto", timeout = 10000) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     const timer = window.setTimeout(() => {
       image.onload = image.onerror = null;
       image.removeAttribute("src");
       reject(new Error("Image timeout"));
-    }, 10000);
+    }, timeout);
     image.fetchPriority = priority;
     image.decoding = "async";
     image.onload = () => { window.clearTimeout(timer); resolve(); };
