@@ -26,7 +26,7 @@ Die Oberfläche, Artliste, Merkmale und bereits verwendete Fotos funktionieren o
 - lokale Notizen und Markierungen pro Art bzw. Tiergruppe mit eigenem Quizfilter
 - frei wählbare Pflanzenfamilien und Tierordnungen
 - wechselnde Fundfotos über exakt aufgelöste iNaturalist-Taxon-IDs
-- automatische Ersatzfotos bei defekten oder kurzzeitig unerreichbaren Bilddateien
+- automatische Ersatzfotos in Quiz und Artenliste bei defekten oder kurzzeitig unerreichbaren Bilddateien
 - mehrere Ansichten derselben Beobachtung bei Gräsern, Binsen, Seggen und Farnen
 - schnelle Arten-Suche und unbeschnittene Bild-Großansicht in Quiz und Artenliste
 - Wikimedia Commons als Bild-Fallback

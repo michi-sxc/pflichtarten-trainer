@@ -135,7 +135,6 @@ async function loadBrowseCardImage(card) {
   card.dataset.imgLoaded = "1";
   const generation = Number(card.dataset.generation);
   const imgWrap = card.querySelector(".browse-card-img");
-  const placeholder = imgWrap.querySelector(".browse-placeholder");
 
   try {
     let photo = browsePhotoCache.get(item.id);
@@ -151,14 +150,46 @@ async function loadBrowseCardImage(card) {
     }
     if (!card.isConnected || generation !== browseGeneration) return;
     card._photo = photo;
-    showBrowseImg(imgWrap, photo.url, item.german);
+    showBrowseImg(imgWrap, photo.url, item.german, () => recoverBrowseCardImage(card, item, generation));
     addBrowsePhotoActions(card, item);
   } catch {
-    if (card.isConnected && generation === browseGeneration && placeholder) placeholder.textContent = "Kein Foto verfügbar";
+    if (card.isConnected && generation === browseGeneration) {
+      setBrowsePlaceholder(imgWrap, "Ersatzfoto wird geladen …");
+      recoverBrowseCardImage(card, item, generation);
+    }
   }
 }
 
-function showBrowseImg(imgWrap, url, name) {
+async function recoverBrowseCardImage(card, item, generation) {
+  if (card.dataset.imgRecovering || !card.isConnected || generation !== browseGeneration) return;
+  card.dataset.imgRecovering = "1";
+  const imgWrap = card.querySelector(".browse-card-img");
+  setBrowsePlaceholder(imgWrap, "Ersatzfoto wird geladen …");
+  try {
+    const photo = await fetchPhoto(item, "low");
+    if (!card.isConnected || generation !== browseGeneration) return;
+    card._photo = photo;
+    browsePhotoCache.set(item.id, photo);
+    showBrowseImg(imgWrap, photo.url, item.german);
+    addBrowsePhotoActions(card, item);
+  } catch {
+    if (card.isConnected && generation === browseGeneration) setBrowsePlaceholder(imgWrap, "Kein Foto verfügbar");
+  } finally {
+    delete card.dataset.imgRecovering;
+  }
+}
+
+function setBrowsePlaceholder(imgWrap, text) {
+  let placeholder = imgWrap.querySelector(".browse-placeholder");
+  if (!placeholder) {
+    placeholder = document.createElement("span");
+    placeholder.className = "browse-placeholder";
+    imgWrap.prepend(placeholder);
+  }
+  placeholder.textContent = text;
+}
+
+function showBrowseImg(imgWrap, url, name, onError = null) {
   const old = imgWrap.querySelector("img");
   if (old) old.remove();
   const img = document.createElement("img");
@@ -172,8 +203,8 @@ function showBrowseImg(imgWrap, url, name) {
   };
   img.onerror = () => {
     img.remove();
-    const placeholder = imgWrap.querySelector(".browse-placeholder");
-    if (placeholder) placeholder.textContent = "Kein Foto verfügbar";
+    setBrowsePlaceholder(imgWrap, onError ? "Ersatzfoto wird geladen …" : "Kein Foto verfügbar");
+    if (onError) onError();
   };
   imgWrap.appendChild(img);
   img.src = url;
@@ -204,17 +235,17 @@ function addBrowsePhotoActions(card, item) {
     if (photo?.variants && photo.variantIndex < photo.variants.length - 1) {
       photo.variantIndex++;
       const next = photo.variants[photo.variantIndex];
-      showBrowseImg(imgWrap, next.url, item.german);
+      showBrowseImg(imgWrap, next.url, item.german, () => recoverBrowseCardImage(card, item, Number(card.dataset.generation)));
       setBrowseActionLabel(change, photo.variantIndex < photo.variants.length - 1 ? "Nächste Ansicht" : "Anderes Foto");
       change.disabled = false;
       return;
     }
     try {
-      const fresh = await fetchINaturalist(item);
+      const fresh = await fetchPhoto(item, "high");
       if (!card.isConnected) return;
       card._photo = fresh;
       browsePhotoCache.set(item.id, fresh);
-      showBrowseImg(imgWrap, fresh.url, item.german);
+      showBrowseImg(imgWrap, fresh.url, item.german, () => recoverBrowseCardImage(card, item, Number(card.dataset.generation)));
       setBrowseActionLabel(change, fresh.variants?.length > 1 ? "Nächste Ansicht" : "Anderes Foto");
     } catch {
       if (card.isConnected) setBrowseActionLabel(change, "Noch einmal versuchen");
