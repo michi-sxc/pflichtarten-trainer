@@ -14,8 +14,10 @@ const elements = {
   sourceLink: $("#source-link"), questionKicker: $("#question-kicker"), questionTitle: $("#question-title"), progressText: $("#progress-text"),
   progressBar: $("#progress-bar"), scoreText: $("#score-text"), mastered: $("#mastered-count"),
   due: $("#due-count"), speciesCount: $("#species-count"), mistakesStart: $("#mistakes-start"),
+  questionCount: $("#question-count"),
   resultPercent: $("#result-percent"), resultDetail: $("#result-detail"), resultMessage: $("#result-message"),
-  resultTime: $("#result-time"),
+  resultTime: $("#result-time"), resultsTitle: $("#results-title"), resultsKicker: $("#results-kicker"),
+  resultQuestions: $("#result-questions"), resultCoverage: $("#result-coverage"), resultRepeats: $("#result-repeats"),
   mistakeReview: $("#mistake-review"), mistakeList: $("#mistake-list"), repeatMistakes: $("#repeat-mistakes"),
   learningNote: $("#learning-note"), featureText: $("#feature-text"), focusText: $("#focus-text"),
   featuresTitle: $("#features-title"), comparisonBlock: $("#comparison-block"), comparisonList: $("#comparison-list"),
@@ -58,7 +60,9 @@ const state = {
   smart: true, answered: false, hintUsed: false, roundMistakes: [], imageToken: 0,
   recentImages: new Map(), responses: [], options: [], photos: [], taxa: loadTaxa(), prefetches: new Map(), roundToken: 0,
   selectedTaxa: new Set(Object.values(TAXON_FILTERS).flat().map(taxon => taxon.key)),
-  inputFields: "both", streak: loadStreak(), correctStreak: 0
+  inputFields: "both", streak: loadStreak(), correctStreak: 0,
+  endless: false, endlessSource: [], endlessDeck: [], endlessCycleSeen: new Set(), endlessRepeatStreak: 0,
+  sessionCoverage: new Set(), sessionPoolSize: 0
 };
 
 function loadStats() {
@@ -217,6 +221,7 @@ function updateAvailableCount() {
   elements.speciesCount.textContent = count ? `${count} ${labels[scope]} in dieser Auswahl` :
     (elements.markedOnly.checked ? "Keine markierten Einträge in dieser Auswahl" : "Mindestens eine Gruppe auswählen");
   elements.startButton.disabled = count === 0;
+  elements.startButton.textContent = elements.questionCount.value === "endless" ? "Endloslauf starten" : "Quiz starten";
   elements.mistakesStart.hidden = due === 0;
   elements.mistakesStart.textContent = `${due} Fehler wiederholen`;
 }
@@ -246,6 +251,39 @@ function weightedSample(items, count) {
   return picked;
 }
 
+function orderPool(pool) {
+  return state.smart ? weightedSample(pool, pool.length) : shuffle(pool);
+}
+
+function startEndlessCycle() {
+  state.endlessDeck = orderPool(state.endlessSource);
+  state.endlessCycleSeen.clear();
+  state.endlessRepeatStreak = 0;
+  const previousId = state.queue[state.queue.length - 1]?.id;
+  if (state.endlessDeck.length > 1 && state.endlessDeck[0].id === previousId) {
+    const swapIndex = state.endlessDeck.findIndex(item => item.id !== previousId);
+    [state.endlessDeck[0], state.endlessDeck[swapIndex]] = [state.endlessDeck[swapIndex], state.endlessDeck[0]];
+  }
+}
+
+function drawEndlessSpecies() {
+  if (!state.endlessDeck.length) startEndlessCycle();
+  const repeatPool = state.endlessSource.filter(item => state.endlessCycleSeen.has(item.id));
+  // max one inserted repeat, so every second question still advances coverage
+  if (repeatPool.length && state.endlessRepeatStreak === 0 && Math.random() < .25) {
+    state.endlessRepeatStreak = 1;
+    return state.smart ? weightedSample(repeatPool, 1)[0] : repeatPool[Math.floor(Math.random() * repeatPool.length)];
+  }
+  state.endlessRepeatStreak = 0;
+  const species = state.endlessDeck.shift();
+  state.endlessCycleSeen.add(species.id);
+  return species;
+}
+
+function appendEndlessQuestion() {
+  if (state.endless) state.queue.push(drawEndlessSpecies());
+}
+
 function startQuiz({ mistakesOnly = false, species = null } = {}) {
   const form = new FormData(elements.setupForm);
   state.scope = form.get("scope") || "all";
@@ -255,8 +293,19 @@ function startQuiz({ mistakesOnly = false, species = null } = {}) {
   const pool = species || scopedSpecies(state.scope).filter(item => !mistakesOnly || getStat(item).mistake);
   if (!pool.length) return;
   const countValue = form.get("count") || "20";
-  const count = mistakesOnly || countValue === "all" ? pool.length : Math.min(Number(countValue), pool.length);
-  state.queue = state.smart ? weightedSample(pool, count) : shuffle(pool).slice(0, count);
+  state.endless = !mistakesOnly && !species && countValue === "endless";
+  state.queue = [];
+  state.endlessSource = state.endless ? [...pool] : [];
+  state.endlessDeck = [];
+  state.endlessCycleSeen = new Set();
+  state.endlessRepeatStreak = 0;
+  state.sessionCoverage = new Set();
+  state.sessionPoolSize = pool.length;
+  if (state.endless) appendEndlessQuestion();
+  else {
+    const count = mistakesOnly || countValue === "all" ? pool.length : Math.min(Number(countValue), pool.length);
+    state.queue = state.smart ? weightedSample(pool, count) : shuffle(pool).slice(0, count);
+  }
   state.index = 0;
   state.score = 0;
   state.correctStreak = 0;
@@ -289,7 +338,10 @@ function showView(name) {
 }
 
 function renderQuestion() {
-  if (state.index >= state.queue.length) return showResults();
+  if (state.index >= state.queue.length) {
+    if (state.endless) appendEndlessQuestion();
+    else return showResults();
+  }
   const species = state.queue[state.index];
   const response = state.responses[state.index];
   state.answered = Boolean(response);
@@ -302,10 +354,11 @@ function renderQuestion() {
   elements.revealButton.hidden = state.answered;
   elements.previousButton.disabled = state.index === 0;
   elements.questionKicker.textContent = species.group === "plant" ? "Pflanze bestimmen" : "Tier bestimmen";
-  elements.progressText.textContent = `${state.index + 1} / ${state.queue.length}`;
+  elements.progressText.textContent = state.endless ? `${state.index + 1} · Endlos` : `${state.index + 1} / ${state.queue.length}`;
   elements.scoreText.textContent = `${state.score} richtig`;
   updateQuizStreak();
-  elements.progressBar.style.width = `${(state.index / state.queue.length) * 100}%`;
+  elements.progressBar.parentElement.hidden = state.endless;
+  if (!state.endless) elements.progressBar.style.width = `${(state.index / state.queue.length) * 100}%`;
   elements.choiceAnswer.hidden = state.mode !== "choice";
   elements.inputAnswer.hidden = state.mode !== "input";
   if (state.mode === "input") {
@@ -437,6 +490,7 @@ function recordAnswer(correct, detail = {}) {
   state.correctStreak = correct ? state.correctStreak + 1 : 0;
   updateQuizStreak();
   const species = state.queue[state.index];
+  state.sessionCoverage.add(species.id);
   state.responses[state.index] = { correct, hintUsed: state.hintUsed, streak: state.correctStreak, ...detail };
   const stat = getStat(species);
   stat.seen++;
@@ -455,6 +509,10 @@ function recordAnswer(correct, detail = {}) {
   saveStats();
   updateStreak();
   updateHeader();
+  if (state.endless && state.index === state.queue.length - 1) {
+    appendEndlessQuestion();
+    prefetchImage(state.index + 1);
+  }
   showFeedback(correct, species, true);
 }
 
@@ -471,9 +529,9 @@ function showFeedback(correct, species, focusNext = true) {
   elements.revealButton.hidden = true;
   showLearningNote(species);
   renderPersonalStudy(species);
-  elements.progressBar.style.width = `${((state.index + 1) / state.queue.length) * 100}%`;
+  if (!state.endless) elements.progressBar.style.width = `${((state.index + 1) / state.queue.length) * 100}%`;
   elements.scoreText.textContent = `${state.score} richtig`;
-  elements.nextButton.textContent = state.index + 1 === state.queue.length ? "Ergebnis ansehen" : "Nächste Frage";
+  elements.nextButton.textContent = !state.endless && state.index + 1 === state.queue.length ? "Ergebnis ansehen" : "Nächste Frage";
   if (focusNext) elements.nextButton.focus();
 }
 
@@ -552,6 +610,7 @@ function revealAnswer() {
 
 function nextQuestion() {
   flushNoteSave();
+  if (state.endless && state.index === state.queue.length - 1) appendEndlessQuestion();
   state.index++;
   renderQuestion();
 }
@@ -855,20 +914,32 @@ function preload(url, priority = "auto") {
   });
 }
 
-function showResults() {
+function answeredCount() {
+  return state.responses.reduce((total, response) => total + Boolean(response), 0);
+}
+
+function showResults({ endedEarly = false } = {}) {
   stopSessionTimer();
   showView("results");
-  const total = state.queue.length;
+  const total = answeredCount();
   const percent = total ? Math.round(state.score / total * 100) : 0;
+  const covered = state.sessionCoverage.size;
+  const coverage = state.sessionPoolSize ? Math.round(covered / state.sessionPoolSize * 100) : 0;
+  elements.resultsKicker.textContent = endedEarly ? "Sitzung beendet" : "Runde beendet";
+  elements.resultsTitle.textContent = state.endless || endedEarly ? "Sitzungsstatistik" : "Dein Ergebnis";
   elements.resultPercent.textContent = `${percent} %`;
   elements.resultDetail.textContent = `${state.score} von ${total} Fragen richtig`;
+  elements.resultQuestions.textContent = total;
+  elements.resultCoverage.textContent = `${coverage} %`;
+  elements.resultRepeats.textContent = Math.max(0, total - covered);
   if (sessionStart) {
     const secs = Math.round((Date.now() - sessionStart) / 1000);
     elements.resultTime.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")} min`;
   } else {
     elements.resultTime.textContent = "";
   }
-  elements.resultMessage.textContent = percent >= 90 ? "Sehr sicher. Eine neue Runde hält die Namen frisch." :
+  elements.resultMessage.textContent = total === 0 ? "Noch keine Frage beantwortet." :
+    percent >= 90 ? "Sehr sicher. Eine neue Runde hält die Namen frisch." :
     percent >= 70 ? "Solide Runde. Wiederhole jetzt am besten nur die Fehler." :
     "Guter Anfang. Kurze Runden mit Fehlerwiederholung bringen am meisten.";
   const uniqueMistakes = [...new Map(state.roundMistakes.map(item => [item.id, item])).values()];
@@ -978,7 +1049,7 @@ elements.speciesNote.addEventListener("input", saveCurrentNote);
 elements.speciesNote.addEventListener("blur", flushNoteSave);
 $$('[data-taxonomy-all]').forEach(button => button.addEventListener("click", () => setTaxonomyGroup(button.dataset.taxonomyAll, true)));
 $$('[data-taxonomy-none]').forEach(button => button.addEventListener("click", () => setTaxonomyGroup(button.dataset.taxonomyNone, false)));
-$("#quit-button").addEventListener("click", () => { flushNoteSave(); stopSessionTimer(); showView("setup"); updateHeader(); });
+$("#quit-button").addEventListener("click", () => { flushNoteSave(); showResults({ endedEarly: true }); });
 $("#back-home").addEventListener("click", () => { flushNoteSave(); stopSessionTimer(); showView("setup"); updateHeader(); });
 elements.homeButton.addEventListener("click", () => { flushNoteSave(); stopSessionTimer(); showView("setup"); updateHeader(); });
 elements.setupForm.addEventListener("change", updateAvailableCount);

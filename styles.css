@@ -297,6 +297,10 @@ select:focus, .input-answer input:focus { outline: 2px solid var(--rust); outlin
 .result-score { margin: 30px 0 24px; display: flex; flex-direction: column; gap: 7px; }
 .result-score strong { font-family: var(--serif); font-size: clamp(4rem, 14vw, 7rem); font-weight: 400; line-height: .9; letter-spacing: -.04em; color: var(--rust-dark); }
 .result-score span, .result-message { color: var(--muted); }
+.result-session { margin: 28px 0 32px; display: grid; grid-template-columns: repeat(3, 1fr); border-block: 1px solid var(--line); }
+.result-session span { padding: 14px 10px; display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; }
+.result-session span + span { border-left: 1px solid var(--line); }
+.result-session strong { color: var(--ink); font-size: 1rem; font-weight: 400; letter-spacing: 0; }
 .mistake-review { margin: 34px 0; padding-top: 25px; border-top: 1px solid var(--line-dark); text-align: left; }
 .mistake-review h2 { font-size: 1.05rem; }
 .mistake-review ul { max-height: 280px; overflow: auto; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }

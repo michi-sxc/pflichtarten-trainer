@@ -33,6 +33,8 @@ Die Oberfläche, Artliste, Merkmale und bereits verwendete Fotos funktionieren o
 - Rücknavigation zur vorherigen Frage mit unverändertem Foto
 - Erkennungsmerkmale, Merkmalsfokus und Vergleichshinweise erst nach jeder Antwort
 - gewichtete Wiederholung unsicherer Arten
+- Endloslauf mit kontrollierten Wiederholungen und garantierter Artenabdeckung
+- Sitzungsstatistik mit Trefferquote, Fragenzahl, Wiederholungen und Abdeckung
 - responsive Feldheft-Gestaltung mit Baskerville Old Face und JetBrains Mono Light
 
 Tiergruppen werden auf der im Heft verlangten Ebene abgefragt. Die Frage nennt deshalb ausdrücklich den Rang, zum Beispiel Ordnung oder Familie.

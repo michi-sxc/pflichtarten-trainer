@@ -21,12 +21,12 @@
   <link rel="dns-prefetch" href="https://static.inaturalist.org">
   <link rel="dns-prefetch" href="https://commons.wikimedia.org">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=16">
   <script defer src="species.js?v=3"></script>
   <script defer src="taxonomy.js?v=1"></script>
   <script defer src="features.js?v=2"></script>
   <script defer src="features-extra.js?v=1"></script>
-  <script defer src="app.js?v=15"></script>
+  <script defer src="app.js?v=16"></script>
   <script defer src="extras.js?v=4"></script>
 </head>
 <body>
@@ -134,6 +134,7 @@
               <option value="20" selected>20</option>
               <option value="40">40</option>
               <option value="all">Alle im Bereich</option>
+              <option value="endless">Endloslauf</option>
             </select>
           </label>
           <label class="check-label">
@@ -232,10 +233,15 @@
     </section>
 
     <section id="results-view" class="view results-view" aria-labelledby="results-title" hidden>
-      <p class="eyebrow">Runde beendet</p>
+      <p id="results-kicker" class="eyebrow">Runde beendet</p>
       <h1 id="results-title">Dein Ergebnis</h1>
       <div class="result-score"><strong id="result-percent">0 %</strong><span id="result-detail"></span><span id="result-time" class="result-time"></span></div>
       <div id="result-message" class="result-message"></div>
+      <div class="result-session" aria-label="Sitzungsstatistik">
+        <span><strong id="result-questions">0</strong> Fragen</span>
+        <span><strong id="result-coverage">0 %</strong> Abdeckung</span>
+        <span><strong id="result-repeats">0</strong> Wiederholungen</span>
+      </div>
       <div id="mistake-review" class="mistake-review" hidden>
         <h2>Noch einmal ansehen</h2>
         <ul id="mistake-list"></ul>
