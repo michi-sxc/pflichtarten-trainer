@@ -55,13 +55,15 @@ let apiGate = Promise.resolve();
 let viewerToken = 0;
 const taxonRequests = new Map();
 const API_MIN_GAP = 350; // ms between iNaturalist API calls
+const ENDLESS_REPEAT_CHANCE = .08;
+const ENDLESS_RECENT_MAX = 4;
 const state = {
   stats: loadStats(), queue: [], index: 0, score: 0, mode: "choice", scope: "all",
   smart: true, answered: false, hintUsed: false, roundMistakes: [], imageToken: 0,
   recentImages: new Map(), responses: [], options: [], photos: [], taxa: loadTaxa(), prefetches: new Map(), roundToken: 0,
   selectedTaxa: new Set(Object.values(TAXON_FILTERS).flat().map(taxon => taxon.key)),
   inputFields: "both", streak: loadStreak(), correctStreak: 0,
-  endless: false, endlessSource: [], endlessDeck: [], endlessCycleSeen: new Set(), endlessRepeatStreak: 0,
+  endless: false, endlessSource: [], endlessDeck: [], endlessCycleSeen: new Set(), endlessCycleRepeatCount: 0,
   sessionCoverage: new Set(), sessionPoolSize: 0
 };
 
@@ -259,24 +261,42 @@ function orderPool(pool) {
 function startEndlessCycle() {
   state.endlessDeck = orderPool(state.endlessSource);
   state.endlessCycleSeen.clear();
-  state.endlessRepeatStreak = 0;
-  const previousId = state.queue[state.queue.length - 1]?.id;
-  if (state.endlessDeck.length > 1 && state.endlessDeck[0].id === previousId) {
-    const swapIndex = state.endlessDeck.findIndex(item => item.id !== previousId);
-    [state.endlessDeck[0], state.endlessDeck[swapIndex]] = [state.endlessDeck[swapIndex], state.endlessDeck[0]];
+  state.endlessCycleRepeatCount = 0;
+}
+
+function recentEndlessIds() {
+  const size = Math.min(ENDLESS_RECENT_MAX, Math.max(1, Math.floor(state.endlessSource.length / 2)));
+  return new Set(state.queue.slice(-size).map(item => item.id));
+}
+
+function recentEndlessCounts() {
+  const counts = new Map();
+  for (const item of state.queue.slice(-Math.min(15, state.endlessSource.length))) {
+    counts.set(item.id, (counts.get(item.id) || 0) + 1);
   }
+  return counts;
 }
 
 function drawEndlessSpecies() {
   if (!state.endlessDeck.length) startEndlessCycle();
-  const repeatPool = state.endlessSource.filter(item => state.endlessCycleSeen.has(item.id));
-  // max one inserted repeat, so every second question still advances coverage
-  if (repeatPool.length && state.endlessRepeatStreak === 0 && Math.random() < .25) {
-    state.endlessRepeatStreak = 1;
-    return state.smart ? weightedSample(repeatPool, 1)[0] : repeatPool[Math.floor(Math.random() * repeatPool.length)];
+  const recent = recentEndlessIds();
+  const recentCounts = recentEndlessCounts();
+  const minimumUnique = Math.min(4, Math.max(1, state.endlessSource.length - 1));
+  // cap extras so coverage keeps moving
+  const repeatBudget = Math.max(1, Math.ceil(state.endlessSource.length * .1));
+  // direct repeats stay possible, 15-question cap prevents clumps
+  const repeatPool = state.endlessSource.filter(item =>
+    state.endlessCycleSeen.has(item.id) && (recentCounts.get(item.id) || 0) < 2);
+  if (state.endlessCycleSeen.size >= minimumUnique && state.endlessCycleRepeatCount < repeatBudget &&
+      repeatPool.length && Math.random() < ENDLESS_REPEAT_CHANCE) {
+    const species = repeatPool[Math.floor(Math.random() * repeatPool.length)];
+    state.endlessCycleRepeatCount++;
+    return species;
   }
-  state.endlessRepeatStreak = 0;
-  const species = state.endlessDeck.shift();
+  let index = state.endlessDeck.findIndex(item => !recent.has(item.id) && !recentCounts.has(item.id));
+  if (index < 0) index = state.endlessDeck.findIndex(item => !recent.has(item.id));
+  if (index < 0) index = 0;
+  const [species] = state.endlessDeck.splice(index, 1);
   state.endlessCycleSeen.add(species.id);
   return species;
 }
@@ -299,7 +319,7 @@ function startQuiz({ mistakesOnly = false, species = null } = {}) {
   state.endlessSource = state.endless ? [...pool] : [];
   state.endlessDeck = [];
   state.endlessCycleSeen = new Set();
-  state.endlessRepeatStreak = 0;
+  state.endlessCycleRepeatCount = 0;
   state.sessionCoverage = new Set();
   state.sessionPoolSize = pool.length;
   if (state.endless) appendEndlessQuestion();
