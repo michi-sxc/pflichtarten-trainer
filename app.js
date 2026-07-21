@@ -42,7 +42,7 @@ const elements = {
 };
 
 const STORAGE_KEY = "pflichtarten-trainer-v1";
-const TAXON_CACHE_KEY = "pflichtarten-taxa-v1";
+const TAXON_CACHE_KEY = "pflichtarten-taxa-v2";
 const STREAK_KEY = "pflichtarten-streak-v1";
 const THEME_KEY = "pflichtarten-theme";
 const TAXON_CACHE_MAX = 500;
@@ -112,6 +112,7 @@ function saveTaxa() {
     }
     const compact = Object.fromEntries([...state.taxa].map(([id, taxon]) => [id, {
       id: taxon.id,
+      name: taxon.name,
       default_photo: taxon.default_photo && {
         url: taxon.default_photo.url,
         medium_url: taxon.default_photo.medium_url,
@@ -354,7 +355,9 @@ function renderQuestion() {
   elements.revealButton.hidden = state.answered;
   elements.previousButton.disabled = state.index === 0;
   elements.questionKicker.textContent = species.group === "plant" ? "Pflanze bestimmen" : "Tier bestimmen";
-  elements.progressText.textContent = state.endless ? `${state.index + 1} · Endlos` : `${state.index + 1} / ${state.queue.length}`;
+  elements.progressText.textContent = state.endless ? "Endloslauf" : `${state.index + 1} / ${state.queue.length}`;
+  if (state.endless) elements.progressText.setAttribute("aria-label", `${state.index + 1}. Frage im Endloslauf`);
+  else elements.progressText.removeAttribute("aria-label");
   elements.scoreText.textContent = `${state.score} richtig`;
   updateQuizStreak();
   elements.progressBar.parentElement.hidden = state.endless;
@@ -683,8 +686,16 @@ async function fetchResolvedTaxon(species) {
   throw new Error("No exact iNaturalist taxon");
 }
 
+function taxonMatchesSpecies(taxon, species) {
+  if (!taxon?.name) return false;
+  const expected = new Set([imageQuery(species), species.latin, ...species.latinAliases].map(cleanTaxonName));
+  return expected.has(cleanTaxonName(taxon.name));
+}
+
 function resolveTaxon(species) {
-  if (state.taxa.has(species.id)) return Promise.resolve(state.taxa.get(species.id));
+  const cached = state.taxa.get(species.id);
+  if (taxonMatchesSpecies(cached, species)) return Promise.resolve(cached);
+  if (cached) state.taxa.delete(species.id);
   if (taxonRequests.has(species.id)) return taxonRequests.get(species.id);
   const request = fetchResolvedTaxon(species).finally(() => taxonRequests.delete(species.id));
   taxonRequests.set(species.id, request);

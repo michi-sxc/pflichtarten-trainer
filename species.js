@@ -469,7 +469,7 @@ const GROUP_TAXA = [
   ["Erinaceidae", "Igel", "Familie", "mammal-families"],
   ["Muridae", "Echte Mäuse", "Familie", "mammal-families", "", "Langschwanzmäuse"],
   ["Cricetidae", "Hamsterartige", "Familie", "mammal-families"],
-  ["Arvicolidae", "Wühlmäuse", "Familie", "mammal-families", "", "Kurzschwanzmäuse"],
+  ["Arvicolidae", "Wühlmäuse", "Familie", "mammal-families", "", "Kurzschwanzmäuse", "Arvicolinae"],
   ["Sciuridae", "Hörnchen", "Familie", "mammal-families"],
   ["Castoridae", "Biber", "Familie", "mammal-families"],
   ["Gliridae", "Schläfer", "Familie", "mammal-families"]
