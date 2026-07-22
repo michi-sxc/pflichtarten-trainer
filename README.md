@@ -33,7 +33,8 @@ Die Oberfläche, Artliste, Merkmale und bereits verwendete Fotos funktionieren o
 - schnelle Suche nach Arten, Aliasen, Gattungen, Familien und Ordnungen
 - unbeschnittene Bild-Großansicht in Quiz und Artenliste
 - Wikimedia Commons als Bild-Fallback
-- mobil optimierter Audioplayer mit MP3-Fallback und vollständiger Commons-Attribution
+- mobil optimierter Audioplayer mit mehreren Format- und Quellen-Fallbacks
+- taxonomisch geprüfte Vogelstimmen von Wikimedia Commons und iNaturalist mit Attribution
 - Hinweise, Fehlerwiederholung und lokal gespeicherter Lernstand
 - Rücknavigation zur vorherigen Frage mit unverändertem Foto
 - Erkennungsmerkmale, Merkmalsfokus und Vergleichshinweise erst nach jeder Antwort

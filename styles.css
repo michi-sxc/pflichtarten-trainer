@@ -233,9 +233,9 @@ select:focus, .input-answer input:focus { outline: 2px solid var(--rust); outlin
 .image-tool:focus-visible, .browse-image-tool:focus-visible { outline: 2px solid var(--paper-light); outline-offset: 2px; }
 .image-tool:disabled, .browse-image-tool:disabled { cursor: wait; opacity: .58; }
 .image-stage img:not([hidden]), .browse-card-img img { cursor: zoom-in; }
-.credit-row { min-height: 40px; padding: 10px 14px; display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); color: var(--muted); font-family: var(--mono); font-size: .64rem; font-style: normal; }
-.credit-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.credit-row a { flex: none; color: var(--rust-dark); }
+.credit-row { min-width: 0; min-height: 40px; padding: 10px 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; border-top: 1px solid var(--line); color: var(--muted); font-family: var(--mono); font-size: .64rem; font-style: normal; }
+.credit-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.credit-row a { color: var(--rust-dark); white-space: nowrap; }
 .question-body { grid-column: 2; grid-row: 1; padding: 38px 34px 30px; border-left: 1px solid var(--line-dark); }
 .question-body h2 { margin-bottom: 25px; font-size: clamp(1.65rem, 3vw, 2.65rem); line-height: 1.08; }
 
@@ -266,9 +266,9 @@ select:focus, .input-answer input:focus { outline: 2px solid var(--rust); outlin
 .audio-error { display: grid; gap: 5px; padding: 10px 0; color: var(--muted); font-size: .72rem; }
 .audio-error strong { color: var(--ink); font-weight: 400; }
 .audio-stage audio { display: none; }
-.audio-credit-row { min-height: 40px; margin: 0 -28px; padding: 10px 14px; display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: .61rem; }
-.audio-credit-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.audio-credit-row a { flex: none; color: var(--rust-dark); }
+.audio-credit-row { min-width: 0; min-height: 40px; margin: 0 -28px; padding: 10px 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: .61rem; }
+.audio-credit-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audio-credit-row a { color: var(--rust-dark); white-space: nowrap; }
 
 .choices { counter-reset: answer; display: grid; grid-template-columns: 1fr; border-top: 1px solid var(--line); }
 .choice {
