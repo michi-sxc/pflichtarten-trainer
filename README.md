@@ -16,13 +16,14 @@ Die Website ist als Progressive Web App (PWA) vorbereitet. Nach dem Hochladen au
 - Android/Chrome: `Auf diesem Gerät installieren` unten in der App oder Browsermenü `App installieren`
 - iPhone/Safari: Teilen-Menü, dann `Zum Home-Bildschirm`
 
-Die Oberfläche, Artliste, Merkmale und bereits verwendete Fotos funktionieren offline. Für neue zufällige Fundfotos ist eine Internetverbindung nötig.
+Die Oberfläche, Artliste, Merkmale und bereits verwendete Fotos funktionieren offline. Für neue zufällige Fundfotos und Vogelstimmen ist eine Internetverbindung nötig.
 
 ## Enthalten
 
 - Single Choice mit ausschließlich ähnlichen Arten bzw. gleichrangigen Tiergruppen
 - direkte Eingabe: deutscher oder wissenschaftlicher Name genügt
 - Pflanzen, Tierarten, Tiergruppen oder gemischte Runden
+- Vogelstimmen-Modus mit zufälligen Gesängen, Rufen und Jungvogelrufen sowie Fotoauflösung
 - lokale Notizen und Markierungen pro Art bzw. Tiergruppe mit eigenem Quizfilter
 - frei wählbare Pflanzenfamilien und Tierordnungen
 - wechselnde Fundfotos über exakt aufgelöste iNaturalist-Taxon-IDs
@@ -32,6 +33,7 @@ Die Oberfläche, Artliste, Merkmale und bereits verwendete Fotos funktionieren o
 - schnelle Suche nach Arten, Aliasen, Gattungen, Familien und Ordnungen
 - unbeschnittene Bild-Großansicht in Quiz und Artenliste
 - Wikimedia Commons als Bild-Fallback
+- mobil optimierter Audioplayer mit MP3-Fallback und vollständiger Commons-Attribution
 - Hinweise, Fehlerwiederholung und lokal gespeicherter Lernstand
 - Rücknavigation zur vorherigen Frage mit unverändertem Foto
 - Erkennungsmerkmale, Merkmalsfokus und Vergleichshinweise erst nach jeder Antwort

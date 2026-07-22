@@ -106,6 +106,16 @@ const TAXONOMY_BY_ID = Object.fromEntries(Object.values(TAXON_FILTERS).flat().fl
   taxon.ids.map(id => [`${taxon.group}-${id}`, taxon])
 ));
 
+const BIRD_ORDER_KEYS = new Set([
+  "podicipediformes", "pelecaniformes", "ciconiiformes", "anseriformes", "accipitriformes",
+  "galliformes", "gruiformes", "charadriiformes", "columbiformes", "cuculiformes",
+  "strigiformes", "apodiformes", "coraciiformes", "piciformes", "passeriformes"
+]);
+
+function isBirdSpecies(item) {
+  return item?.kind === "species" && item.group === "animal" && BIRD_ORDER_KEYS.has(TAXONOMY_BY_ID[item.id]?.key);
+}
+
 // these need structure shots, not just a pretty overview
 const DIAGNOSTIC_FOCUS = {
   equisetaceae: "Zuerst Verzweigung, Scheidenzähne und Sporenähre prüfen.",

@@ -21,12 +21,13 @@
   <link rel="dns-prefetch" href="https://static.inaturalist.org">
   <link rel="dns-prefetch" href="https://commons.wikimedia.org">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=18">
   <script defer src="species.js?v=4"></script>
-  <script defer src="taxonomy.js?v=1"></script>
+  <script defer src="taxonomy.js?v=2"></script>
   <script defer src="features.js?v=2"></script>
   <script defer src="features-extra.js?v=1"></script>
-  <script defer src="app.js?v=19"></script>
+  <script defer src="app.js?v=20"></script>
+  <script defer src="audio.js?v=2"></script>
   <script defer src="extras.js?v=6"></script>
 </head>
 <body>
@@ -53,18 +54,19 @@
       <div class="intro">
         <p class="eyebrow">Freiberger Pflichtartenheft</p>
         <h1 id="setup-title">Artenquiz</h1>
-        <p>Pflichtarten mit wechselnden Fundfotos üben. Der Lernstand bleibt auf diesem Gerät.</p>
+        <p>Pflichtarten mit wechselnden Fundfotos und Vogelstimmen üben. Der Lernstand bleibt auf diesem Gerät.</p>
       </div>
 
       <form id="setup-form" class="setup-card">
         <p class="setup-index">Quiz einstellen</p>
         <fieldset>
           <legend>Was möchtest du lernen?</legend>
-          <div class="segmented" data-field="scope">
+          <div class="segmented scope-segmented" data-field="scope">
             <label><input type="radio" name="scope" value="all" checked><span>Alle</span></label>
             <label><input type="radio" name="scope" value="plant"><span>Pflanzen</span></label>
             <label><input type="radio" name="scope" value="animal"><span>Tierarten</span></label>
             <label><input type="radio" name="scope" value="taxon"><span>Tiergruppen</span></label>
+            <label><input type="radio" name="scope" value="birdsong"><span>Vogelstimmen</span></label>
           </div>
         </fieldset>
 
@@ -164,21 +166,49 @@
       </div>
 
       <article class="question-card">
-        <div class="image-stage">
-          <div id="image-loader" class="image-loader" role="status">Foto wird geladen ...</div>
-          <img id="species-image" alt="Zu bestimmende Art" decoding="async" hidden>
-          <div id="image-error" class="image-error" hidden>
-            <strong>Foto konnte nicht geladen werden.</strong>
-            <span>Prüfe deine Internetverbindung oder lade ein neues.</span>
+        <div class="media-column">
+          <section id="audio-stage" class="audio-stage" aria-label="Vogelstimmen-Player" hidden>
+            <div class="audio-heading">
+              <span id="audio-type" class="audio-type">Vogelstimme</span>
+              <span id="audio-status" class="audio-status" role="status">Aufnahme wird geladen …</span>
+            </div>
+            <div id="audio-wave" class="audio-wave" aria-hidden="true"></div>
+            <div class="audio-controls">
+              <button id="audio-play" class="audio-play" type="button" aria-label="Aufnahme abspielen" disabled><span aria-hidden="true">▶</span></button>
+              <div class="audio-timeline">
+                <input id="audio-progress" class="audio-progress" type="range" min="0" max="1000" value="0" aria-label="Position in der Aufnahme" disabled>
+                <div class="audio-time"><span id="audio-current">0:00</span><span id="audio-duration">–:––</span></div>
+              </div>
+            </div>
+            <div id="audio-error" class="audio-error" hidden>
+              <strong>Aufnahme konnte nicht geladen werden.</strong>
+              <span>Versuche eine andere Aufnahme oder prüfe die Internetverbindung.</span>
+            </div>
+            <button id="new-audio" class="audio-change text-button" type="button">Andere Aufnahme</button>
+            <audio id="species-audio" preload="metadata"></audio>
+            <div class="audio-credit-row">
+              <span id="audio-credit">Aufnahmequelle wird geladen …</span>
+              <a id="audio-source-link" href="https://commons.wikimedia.org" target="_blank" rel="noreferrer">Aufnahme öffnen</a>
+            </div>
+          </section>
+
+          <div id="image-stage" class="image-stage">
+            <span id="photo-reveal-label" class="photo-reveal-label" hidden>Auflösung</span>
+            <div id="image-loader" class="image-loader" role="status">Foto wird geladen ...</div>
+            <img id="species-image" alt="Zu bestimmende Art" decoding="async" hidden>
+            <div id="image-error" class="image-error" hidden>
+              <strong>Foto konnte nicht geladen werden.</strong>
+              <span>Prüfe deine Internetverbindung oder lade ein neues.</span>
+            </div>
+            <div class="image-tools" aria-label="Bildsteuerung">
+              <button id="new-image" class="image-tool" type="button" aria-label="Anderes Foto" title="Anderes Foto"><span aria-hidden="true">↻</span></button>
+              <button id="expand-image" class="image-tool" type="button" aria-label="Bild vergrößern" title="Bild vergrößern"><span aria-hidden="true">⛶</span></button>
+            </div>
           </div>
-          <div class="image-tools" aria-label="Bildsteuerung">
-            <button id="new-image" class="image-tool" type="button" aria-label="Anderes Foto" title="Anderes Foto"><span aria-hidden="true">↻</span></button>
-            <button id="expand-image" class="image-tool" type="button" aria-label="Bild vergrößern" title="Bild vergrößern"><span aria-hidden="true">⛶</span></button>
+          <div id="photo-credit-row" class="credit-row">
+            <span id="image-credit">Fotoquelle: iNaturalist</span>
+            <a id="source-link" href="https://www.inaturalist.org" target="_blank" rel="noreferrer">Quelle öffnen</a>
           </div>
-        </div>
-        <div class="credit-row">
-          <span id="image-credit">Fotoquelle: iNaturalist</span>
-          <a id="source-link" href="https://www.inaturalist.org" target="_blank" rel="noreferrer">Quelle öffnen</a>
         </div>
 
         <div class="question-body">
@@ -316,7 +346,7 @@
   </dialog>
 
   <footer>
-    <span>Arten und Tiergruppen nach dem Freiberger Pflichtartenheft, 12. Auflage 2020. Fotos von iNaturalist-Mitwirkenden.</span>
+    <span>Pflichtartenheft, 12. Auflage 2020. Fotos von iNaturalist-, Vogelstimmen von Wikimedia-Commons-Mitwirkenden.</span>
     <button id="install-button" class="footer-install" type="button" hidden>Auf diesem Gerät installieren</button>
   </footer>
 </body>

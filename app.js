@@ -10,7 +10,12 @@ const elements = {
   feedbackLabel: $("#feedback-label"), answerGerman: $("#answer-german"), answerLatin: $("#answer-latin"),
   hintButton: $("#hint-button"), hintText: $("#hint-text"), revealButton: $("#reveal-button"),
   previousButton: $("#previous-button"), nextButton: $("#next-button"), newImage: $("#new-image"), expandImage: $("#expand-image"), image: $("#species-image"),
+  imageStage: $("#image-stage"), photoCreditRow: $("#photo-credit-row"), photoRevealLabel: $("#photo-reveal-label"),
   imageLoader: $("#image-loader"), imageError: $("#image-error"), imageCredit: $("#image-credit"),
+  audioStage: $("#audio-stage"), audio: $("#species-audio"), audioPlay: $("#audio-play"), audioProgress: $("#audio-progress"),
+  audioCurrent: $("#audio-current"), audioDuration: $("#audio-duration"), audioType: $("#audio-type"), audioStatus: $("#audio-status"),
+  audioWave: $("#audio-wave"), audioError: $("#audio-error"), newAudio: $("#new-audio"),
+  audioCredit: $("#audio-credit"), audioSourceLink: $("#audio-source-link"),
   sourceLink: $("#source-link"), questionKicker: $("#question-kicker"), questionTitle: $("#question-title"), progressText: $("#progress-text"),
   progressBar: $("#progress-bar"), scoreText: $("#score-text"), mastered: $("#mastered-count"),
   due: $("#due-count"), speciesCount: $("#species-count"), mistakesStart: $("#mistakes-start"),
@@ -62,7 +67,8 @@ const state = {
   smart: true, answered: false, hintUsed: false, roundMistakes: [], imageToken: 0,
   recentImages: new Map(), responses: [], options: [], photos: [], taxa: loadTaxa(), prefetches: new Map(), roundToken: 0,
   selectedTaxa: new Set(Object.values(TAXON_FILTERS).flat().map(taxon => taxon.key)),
-  inputFields: "both", streak: loadStreak(), correctStreak: 0,
+  inputFields: "both", streak: loadStreak(), correctStreak: 0, voiceMode: false,
+  sounds: [], soundPrefetches: new Map(), recentSounds: new Map(), audioToken: 0,
   endless: false, endlessSource: [], endlessDeck: [], endlessCycleSeen: new Set(), endlessCycleRepeatCount: 0,
   sessionCoverage: new Set(), sessionPoolSize: 0
 };
@@ -159,7 +165,8 @@ function levelFilterFn(item) {
 
 function scopedSpecies(scope = currentScope(), markedOnly = elements.markedOnly.checked) {
   const inScope = item => scope === "all" ||
-    (scope === "taxon" ? item.kind === "taxon" : item.group === scope && item.kind === "species");
+    (scope === "taxon" ? item.kind === "taxon" :
+      scope === "birdsong" ? isBirdSpecies(item) : item.group === scope && item.kind === "species");
   return SPECIES.filter(item => inScope(item) &&
     (item.kind === "taxon" || state.selectedTaxa.has(TAXONOMY_BY_ID[item.id]?.key)) &&
     (!markedOnly || getStat(item).marked) && levelFilterFn(item));
@@ -172,6 +179,7 @@ function renderTaxonomyFilters() {
       const label = document.createElement("label");
       const inputId = `taxonomy-${taxon.key}`;
       label.className = "taxonomy-option";
+      label.dataset.taxonKey = taxon.key;
       label.htmlFor = inputId;
       label.innerHTML = `<input id="${inputId}" type="checkbox" value="${taxon.key}" checked><span><strong>${escapeHtml(taxon.german)}</strong><em>${escapeHtml(taxon.latin)}</em></span>`;
       label.querySelector("input").addEventListener("change", event => {
@@ -184,6 +192,12 @@ function renderTaxonomyFilters() {
   }
 }
 
+function visibleTaxa(group, scope = currentScope()) {
+  return group === "animal" && scope === "birdsong"
+    ? TAXON_FILTERS.animal.filter(taxon => BIRD_ORDER_KEYS.has(taxon.key))
+    : TAXON_FILTERS[group];
+}
+
 function toggleTaxonomyFilter() {
   const expanded = elements.taxonomyToggle.getAttribute("aria-expanded") !== "true";
   elements.taxonomyToggle.setAttribute("aria-expanded", String(expanded));
@@ -192,21 +206,29 @@ function toggleTaxonomyFilter() {
 }
 
 function setTaxonomyGroup(group, selected) {
-  for (const taxon of TAXON_FILTERS[group]) {
+  const visible = visibleTaxa(group);
+  const keys = new Set(visible.map(taxon => taxon.key));
+  for (const taxon of visible) {
     if (selected) state.selectedTaxa.add(taxon.key);
     else state.selectedTaxa.delete(taxon.key);
   }
-  elements[`${group}TaxonomyList`].querySelectorAll("input").forEach(input => { input.checked = selected; });
+  elements[`${group}TaxonomyList`].querySelectorAll("input").forEach(input => {
+    if (keys.has(input.value)) input.checked = selected;
+  });
   updateAvailableCount();
 }
 
 function updateTaxonomyFilter(scope) {
   elements.taxonomyFilter.dataset.scope = scope;
   elements.taxonomyFilter.hidden = scope === "taxon";
-  elements.plantTaxonomy.hidden = scope === "animal";
+  elements.plantTaxonomy.hidden = scope === "animal" || scope === "birdsong";
   elements.animalTaxonomy.hidden = scope === "plant";
+  elements.animalTaxonomyList.querySelectorAll(".taxonomy-option").forEach(label => {
+    label.hidden = scope === "birdsong" && !BIRD_ORDER_KEYS.has(label.dataset.taxonKey);
+  });
   if (scope === "taxon") return;
-  const visible = scope === "all" ? [...TAXON_FILTERS.plant, ...TAXON_FILTERS.animal] : TAXON_FILTERS[scope];
+  const visible = scope === "all" ? [...TAXON_FILTERS.plant, ...TAXON_FILTERS.animal] :
+    scope === "birdsong" ? visibleTaxa("animal", scope) : TAXON_FILTERS[scope];
   const selected = visible.filter(taxon => state.selectedTaxa.has(taxon.key)).length;
   elements.taxonomySummary.textContent = selected === visible.length ? "Alle ausgewählt" : `${selected} von ${visible.length}`;
 }
@@ -218,7 +240,7 @@ function updateAvailableCount() {
   const selected = elements.markedOnly.checked ? available.filter(item => getStat(item).marked) : available;
   const count = selected.length;
   const due = selected.filter(item => getStat(item).mistake).length;
-  const labels = { all: "Arten und Tiergruppen", plant: "Pflanzenarten", animal: "Tierarten", taxon: "Tiergruppen" };
+  const labels = { all: "Arten und Tiergruppen", plant: "Pflanzenarten", animal: "Tierarten", taxon: "Tiergruppen", birdsong: "Vogelarten" };
   updateTaxonomyFilter(scope);
   elements.markedFilterCount.textContent = `${markedCount} markiert`;
   elements.speciesCount.textContent = count ? `${count} ${labels[scope]} in dieser Auswahl` :
@@ -308,6 +330,7 @@ function appendEndlessQuestion() {
 function startQuiz({ mistakesOnly = false, species = null } = {}) {
   const form = new FormData(elements.setupForm);
   state.scope = form.get("scope") || "all";
+  state.voiceMode = state.scope === "birdsong";
   state.mode = form.get("mode") || "choice";
   state.smart = form.get("smart") === "on";
   state.inputFields = form.get("inputFields") || "both";
@@ -335,7 +358,10 @@ function startQuiz({ mistakesOnly = false, species = null } = {}) {
   state.responses = [];
   state.options = [];
   state.photos = [];
+  state.sounds = [];
   state.prefetches.clear();
+  state.soundPrefetches.clear();
+  resetQuestionAudio();
   state.roundToken++;
   startSessionTimer();
   showView("quiz");
@@ -343,6 +369,7 @@ function startQuiz({ mistakesOnly = false, species = null } = {}) {
 }
 
 function showView(name) {
+  if (name !== "quiz") elements.audio.pause();
   for (const view of [elements.setup, elements.quiz, elements.results, elements.browse, elements.statsView]) {
     view.hidden = true;
   }
@@ -401,6 +428,9 @@ function renderQuestion() {
   if (species.kind === "taxon") {
     elements.questionKicker.textContent = `Tiergruppe · ${species.rank}`;
     elements.questionTitle.textContent = rankQuestion(species.rank);
+  } else if (state.voiceMode) {
+    elements.questionKicker.textContent = "Vogelstimme bestimmen";
+    elements.questionTitle.textContent = "Welche Vogelart hörst du?";
   } else {
     elements.questionKicker.textContent = species.group === "plant" ? "Pflanze bestimmen" : "Tier bestimmen";
     elements.questionTitle.textContent = "Welche Art ist das?";
@@ -408,7 +438,7 @@ function renderQuestion() {
   if (state.mode === "choice") renderChoices(species, response);
   else if (!state.answered) requestAnimationFrame(() => elements.germanInput.focus());
   else showInputValidity(response);
-  loadImage(species);
+  renderQuestionMedia(species, response);
   if (response) showFeedback(response.correct, species, false);
 }
 
@@ -534,7 +564,7 @@ function recordAnswer(correct, detail = {}) {
   updateHeader();
   if (state.endless && state.index === state.queue.length - 1) {
     appendEndlessQuestion();
-    prefetchImage(state.index + 1);
+    prefetchQuestionMedia(state.index + 1);
   }
   showFeedback(correct, species, true);
 }
@@ -550,6 +580,7 @@ function showFeedback(correct, species, focusNext = true) {
   elements.answerLatin.textContent = [species.latin, ...species.latinAliases].join(" / ");
   elements.hintButton.hidden = true;
   elements.revealButton.hidden = true;
+  revealQuestionPhoto(species);
   showLearningNote(species);
   renderPersonalStudy(species);
   if (!state.endless) elements.progressBar.style.width = `${((state.index + 1) / state.queue.length) * 100}%`;
@@ -853,7 +884,7 @@ function prefetchImage(index) {
 }
 
 function warmImages(index, photo) {
-  prefetchImage(index + 1);
+  if (!state.voiceMode) prefetchImage(index + 1);
   const warmVariants = () => photo.variants?.slice(1).forEach(item => preload(item.url, "low").catch(() => {}));
   if ("requestIdleCallback" in window) window.requestIdleCallback(warmVariants, { timeout: 1200 });
   else window.setTimeout(warmVariants, 250);
@@ -985,6 +1016,7 @@ function answeredCount() {
 
 function showResults({ endedEarly = false } = {}) {
   stopSessionTimer();
+  elements.audio.pause();
   showView("results");
   const total = answeredCount();
   const percent = total ? Math.round(state.score / total * 100) : 0;

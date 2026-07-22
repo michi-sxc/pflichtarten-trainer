@@ -1,4 +1,4 @@
-const VERSION = "pflichtarten-v17";
+const VERSION = "pflichtarten-v19";
 const SHELL_CACHE = `${VERSION}-shell`;
 const DATA_CACHE = `${VERSION}-data`;
 const PHOTO_CACHE = `${VERSION}-photos`;
@@ -6,12 +6,13 @@ const BASE = new URL("./", self.location);
 const shellFiles = [
   "./",
   "./index.html",
-  "./styles.css?v=16",
+  "./styles.css?v=18",
   "./species.js?v=4",
-  "./taxonomy.js?v=1",
+  "./taxonomy.js?v=2",
   "./features.js?v=2",
   "./features-extra.js?v=1",
-  "./app.js?v=19",
+  "./app.js?v=20",
+  "./audio.js?v=2",
   "./extras.js?v=6",
   "./manifest.webmanifest?v=1",
   "./icons/icon.svg",
@@ -76,6 +77,9 @@ self.addEventListener("fetch", event => {
     event.respondWith(networkFirst(request, SHELL_CACHE, new URL("./index.html", BASE).href));
     return;
   }
+
+  // let the browser handle byte ranges for audio seeking
+  if (request.destination === "audio") return;
 
   if (request.destination === "image" || request.destination === "font") {
     event.respondWith(cacheFirst(request, PHOTO_CACHE, 140));
