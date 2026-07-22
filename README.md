@@ -29,7 +29,8 @@ Die Oberfläche, Artliste, Merkmale und bereits verwendete Fotos funktionieren o
 - validierter Taxon-Cache mit passenden Bildtaxa für veraltete Heftnamen
 - automatische Ersatzfotos in Quiz und Artenliste bei defekten oder kurzzeitig unerreichbaren Bilddateien
 - mehrere Ansichten derselben Beobachtung bei Gräsern, Binsen, Seggen und Farnen
-- schnelle Arten-Suche und unbeschnittene Bild-Großansicht in Quiz und Artenliste
+- schnelle Suche nach Arten, Aliasen, Gattungen, Familien und Ordnungen
+- unbeschnittene Bild-Großansicht in Quiz und Artenliste
 - Wikimedia Commons als Bild-Fallback
 - Hinweise, Fehlerwiederholung und lokal gespeicherter Lernstand
 - Rücknavigation zur vorherigen Frage mit unverändertem Foto

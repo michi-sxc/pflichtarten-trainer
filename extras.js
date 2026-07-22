@@ -13,17 +13,49 @@ let browseSearchTimer;
 const browsePhotoCache = new Map();
 let statsSort = { key: "name", direction: 1 };
 
+function compactBrowseSearch(value) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function normalizeBrowseSearch(value) {
+  const raw = String(value || "").toLowerCase();
+  const plain = compactBrowseSearch(raw.replace(/ß/g, "ss"));
+  const german = compactBrowseSearch(raw.replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss"));
+  return plain === german ? plain : `${plain} ${german}`;
+}
+
+function browseSearchText(item) {
+  const taxonomy = TAXONOMY_BY_ID[item.id];
+  const genus = item.kind === "species" ? item.latin.split(/\s+/)[0] : "";
+  const type = item.kind === "taxon"
+    ? `Tiergruppe ${item.rank || ""}`
+    : `${item.group === "plant" ? "Pflanze Pflanzenart" : "Tier Tierart"} Art Gattung ${genus}`;
+  const classification = taxonomy
+    ? `${taxonomy.latin} ${taxonomy.german} ${taxonomy.group === "plant" ? "Familie Pflanzenfamilie" : "Ordnung Tierordnung"}`
+    : "";
+  return normalizeBrowseSearch([
+    item.german, item.latin, ...(item.germanAliases || []), ...(item.latinAliases || []),
+    type, classification
+  ].join(" "));
+}
+
+// precompute once, search runs on every keystroke
+const BROWSE_SEARCH_INDEX = new Map(SPECIES.map(item => [item.id, browseSearchText(item).split(" ")]));
+
+function matchesBrowseSearch(item, terms) {
+  const words = BROWSE_SEARCH_INDEX.get(item.id);
+  return terms.every(term => words.some(word => word.startsWith(term)));
+}
+
 function browseFiltered() {
-  const q = browseSearch.toLowerCase();
+  const terms = normalizeBrowseSearch(browseSearch).split(" ").filter(Boolean);
   return SPECIES.filter(item => {
     if (browseFilter === "plant" && item.group !== "plant") return false;
     if (browseFilter === "animal" && item.group !== "animal") return false;
     if (browseFilter === "taxon" && item.kind !== "taxon") return false;
     if (browseFilter === "marked" && !getStat(item).marked) return false;
-    if (q) {
-      const hay = `${item.german} ${item.latin} ${(item.germanAliases || []).join(" ")} ${(item.latinAliases || []).join(" ")}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
+    if (terms.length && !matchesBrowseSearch(item, terms)) return false;
     return true;
   });
 }
