@@ -21,14 +21,14 @@
   <link rel="dns-prefetch" href="https://static.inaturalist.org">
   <link rel="dns-prefetch" href="https://commons.wikimedia.org">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="styles.css?v=21">
   <script defer src="species.js?v=4"></script>
   <script defer src="taxonomy.js?v=2"></script>
   <script defer src="features.js?v=2"></script>
   <script defer src="features-extra.js?v=1"></script>
   <script defer src="app.js?v=20"></script>
   <script defer src="audio.js?v=6"></script>
-  <script defer src="extras.js?v=6"></script>
+  <script defer src="extras.js?v=7"></script>
 </head>
 <body>
   <header class="app-header">
@@ -295,7 +295,7 @@
         <button class="browse-filter" data-filter="taxon" type="button">Tiergruppen</button>
         <button class="browse-filter" data-filter="marked" type="button">Markierte</button>
       </div>
-      <div id="browse-grid" class="browse-grid"></div>
+      <div id="browse-grid" class="browse-grid" aria-live="polite"></div>
       <button id="browse-more" class="button subtle wide" type="button" hidden>Mehr laden</button>
     </section>
 

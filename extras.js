@@ -41,15 +41,15 @@ function browseSearchText(item) {
 }
 
 // precompute once, search runs on every keystroke
-const BROWSE_SEARCH_INDEX = new Map(SPECIES.map(item => [item.id, browseSearchText(item).split(" ")]));
+const BROWSE_SEARCH_INDEX = new Map(SPECIES.map(item => [item.id, browseSearchText(item)]));
 
 function matchesBrowseSearch(item, terms) {
-  const words = BROWSE_SEARCH_INDEX.get(item.id);
-  return terms.every(term => words.some(word => word.startsWith(term)));
+  const text = BROWSE_SEARCH_INDEX.get(item.id);
+  return terms.every(term => text.includes(term));
 }
 
 function browseFiltered() {
-  const terms = normalizeBrowseSearch(browseSearch).split(" ").filter(Boolean);
+  const terms = [...new Set(normalizeBrowseSearch(browseSearch).split(" ").filter(Boolean))];
   return SPECIES.filter(item => {
     if (browseFilter === "plant" && item.group !== "plant") return false;
     if (browseFilter === "animal" && item.group !== "animal") return false;
@@ -62,6 +62,14 @@ function browseFiltered() {
 
 function renderBrowsePage() {
   const items = browseFiltered();
+  if (!items.length && browseOffset === 0) {
+    const empty = document.createElement("p");
+    empty.className = "browse-empty";
+    empty.textContent = browseSearch ? `Keine Treffer für „${browseSearch}“` : "Keine Arten in dieser Auswahl";
+    elements.browseGrid.appendChild(empty);
+    elements.browseMore.hidden = true;
+    return;
+  }
   const slice = items.slice(browseOffset, browseOffset + BROWSE_PAGE);
   const frag = document.createDocumentFragment();
 
