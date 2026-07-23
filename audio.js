@@ -1,5 +1,11 @@
 const COMMONS_AUDIO_API = "https://commons.wikimedia.org/w/api.php";
 const birdSoundPools = new Map();
+const WAVE_VIEWBOX_WIDTH = 720;
+const WAVE_PADDING = 10;
+const WAVE_CENTER = 56;
+let waveProgressClip;
+let wavePlayhead;
+let wavePlayheadDot;
 
 function soundQueryNames(species) {
   return [...new Set([species.latin, ...species.latinAliases].map(name =>
@@ -172,6 +178,78 @@ function currentSound(recording) {
   return recording?.variants?.[recording.variantIndex] || recording;
 }
 
+function waveRandom(seed) {
+  let value = seed || 1;
+  return () => {
+    value = Math.imul(value ^ value >>> 15, 1 | value);
+    value ^= value + Math.imul(value ^ value >>> 7, 61 | value);
+    return ((value ^ value >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function waveSeed(value) {
+  let hash = 2166136261;
+  for (const char of value || "pflichtarten") {
+    hash ^= char.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+// stable per recording, works with cross-origin audio too
+function waveformPath(value) {
+  const count = 86;
+  const random = waveRandom(waveSeed(value));
+  const phaseA = random() * Math.PI * 2;
+  const phaseB = random() * Math.PI * 2;
+  const raw = Array.from({ length: count }, (_, index) => {
+    const position = index / (count - 1);
+    const phrase = .62 + Math.sin(index * .31 + phaseA) * .17 + Math.sin(index * .12 + phaseB) * .13;
+    const edge = Math.pow(Math.sin(Math.PI * (.04 + position * .92)), .3);
+    return 9 + Math.max(.16, phrase * (.48 + random() * .68)) * edge * 72;
+  });
+  const heights = raw.map((height, index) =>
+    (raw[index - 1] || height) * .2 + height * .6 + (raw[index + 1] || height) * .2);
+  return heights.map((height, index) => {
+    const x = WAVE_PADDING + index * (WAVE_VIEWBOX_WIDTH - WAVE_PADDING * 2) / (count - 1);
+    const half = Math.min(43, height / 2);
+    return `M${x.toFixed(1)} ${(WAVE_CENTER - half).toFixed(1)}V${(WAVE_CENTER + half).toFixed(1)}`;
+  }).join("");
+}
+
+function updateWaveProgress(progress) {
+  const position = Math.max(0, Math.min(1, progress || 0));
+  const x = WAVE_PADDING + position * (WAVE_VIEWBOX_WIDTH - WAVE_PADDING * 2);
+  waveProgressClip?.setAttribute("width", String(position ? x : 0));
+  wavePlayhead?.setAttribute("x1", String(x));
+  wavePlayhead?.setAttribute("x2", String(x));
+  wavePlayheadDot?.setAttribute("cx", String(x));
+  elements.audioWave.classList.toggle("has-progress", position > .002);
+}
+
+function renderAudioWave(value = "pflichtarten") {
+  const path = waveformPath(value);
+  elements.audioWave.querySelector(".audio-wave-base")?.setAttribute("d", path);
+  elements.audioWave.querySelector(".audio-wave-played")?.setAttribute("d", path);
+  updateWaveProgress(0);
+}
+
+function buildAudioWave() {
+  elements.audioWave.innerHTML = `
+    <svg viewBox="0 0 ${WAVE_VIEWBOX_WIDTH} 112" preserveAspectRatio="none" focusable="false">
+      <defs><clipPath id="audio-wave-progress-clip"><rect class="audio-wave-progress-clip" x="0" y="0" width="0" height="112"></rect></clipPath></defs>
+      <path class="audio-wave-axis" d="M6 ${WAVE_CENTER}H714"></path>
+      <path class="audio-wave-base"></path>
+      <path class="audio-wave-played" clip-path="url(#audio-wave-progress-clip)"></path>
+      <line class="audio-wave-playhead" x1="${WAVE_PADDING}" x2="${WAVE_PADDING}" y1="12" y2="100"></line>
+      <circle class="audio-wave-playhead-dot" cx="${WAVE_PADDING}" cy="${WAVE_CENTER}" r="3"></circle>
+    </svg>`;
+  waveProgressClip = elements.audioWave.querySelector(".audio-wave-progress-clip");
+  wavePlayhead = elements.audioWave.querySelector(".audio-wave-playhead");
+  wavePlayheadDot = elements.audioWave.querySelector(".audio-wave-playhead-dot");
+  renderAudioWave();
+}
+
 function formatAudioTime(seconds) {
   if (!Number.isFinite(seconds)) return "–:––";
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
@@ -182,6 +260,7 @@ function resetAudioPosition() {
   elements.audioProgress.style.setProperty("--position", "0%");
   elements.audioCurrent.textContent = "0:00";
   elements.audioDuration.textContent = "–:––";
+  updateWaveProgress(0);
 }
 
 function setAudioPlaying(playing) {
@@ -207,6 +286,7 @@ function displaySound(recording) {
   elements.audio.dataset.token = String(state.audioToken);
   elements.audio.src = sound.url;
   elements.audio.load();
+  renderAudioWave(sound.url);
   rememberSound(species, sound.url);
 }
 
@@ -325,16 +405,11 @@ function updateAudioTimeline() {
   elements.audioProgress.value = Number.isFinite(duration) && duration > 0
     ? Math.round(elements.audio.currentTime / duration * 1000) : 0;
   elements.audioProgress.style.setProperty("--position", `${elements.audioProgress.value / 10}%`);
+  updateWaveProgress(elements.audioProgress.value / 1000);
 }
 
 function initBirdAudio() {
-  const heights = [32, 55, 78, 44, 67, 91, 58, 36, 73, 48, 86, 62, 38, 69, 95, 51, 76, 41, 83, 57, 34, 71, 89, 46, 64, 39, 81, 53, 74, 43, 66];
-  elements.audioWave.replaceChildren(...heights.map((height, index) => {
-    const bar = document.createElement("span");
-    bar.style.setProperty("--height", `${height}%`);
-    bar.style.setProperty("--delay", `${index % 7 * -80}ms`);
-    return bar;
-  }));
+  buildAudioWave();
   elements.audioPlay.addEventListener("click", async () => {
     if (elements.audio.paused) {
       try { await elements.audio.play(); }

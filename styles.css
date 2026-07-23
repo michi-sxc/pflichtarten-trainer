@@ -244,10 +244,17 @@ select:focus, .input-answer input:focus { outline: 2px solid var(--rust); outlin
 .audio-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .audio-type { padding: 5px 8px 4px; border: 1px solid var(--rust-dark); color: var(--rust-dark); font-size: .64rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
 .audio-status { color: var(--muted); font-size: .66rem; text-align: right; }
-.audio-wave { height: 118px; display: flex; align-items: center; justify-content: center; gap: clamp(2px, .45vw, 5px); padding: 16px 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); overflow: hidden; }
-.audio-wave span { width: 3px; height: var(--height); flex: 1 1 3px; max-width: 7px; background: var(--line-dark); transform: scaleY(.72); transform-origin: center; }
-.audio-stage.playing .audio-wave span { background: var(--rust-dark); animation: voice-pulse .72s ease-in-out infinite alternate; animation-delay: var(--delay); }
-@keyframes voice-pulse { to { transform: scaleY(1.08); } }
+.audio-wave { position: relative; height: 118px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); overflow: hidden; }
+.audio-wave svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.audio-wave-axis { fill: none; stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.audio-wave-base, .audio-wave-played { fill: none; stroke-linecap: round; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.audio-wave-base { stroke: var(--line-dark); opacity: .62; }
+.audio-wave-played { stroke: var(--rust-dark); }
+.audio-wave-playhead, .audio-wave-playhead-dot { opacity: 0; transition: opacity .18s ease; }
+.audio-wave-playhead { stroke: var(--rust-dark); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.audio-wave-playhead-dot { fill: var(--paper-deep); stroke: var(--rust-dark); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.audio-wave.has-progress .audio-wave-playhead, .audio-wave.has-progress .audio-wave-playhead-dot { opacity: 1; }
+.audio-stage.playing .audio-wave-playhead-dot { fill: var(--rust-dark); }
 .audio-controls { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 18px; }
 .audio-play { width: 52px; height: 52px; display: grid; place-items: center; padding: 0; border: 1px solid var(--selected-bg); border-radius: 50%; background: var(--selected-bg); color: var(--selected-fg); cursor: pointer; font-size: .9rem; }
 .audio-play:hover { background: var(--rust-dark); border-color: var(--rust-dark); }
@@ -382,7 +389,7 @@ footer { width: min(100% - 48px, 1120px); margin: 0 auto; padding: 22px 0 36px; 
   .image-stage::after { inset: 5px; }
   .photo-reveal-label { top: 12px; left: 12px; }
   .audio-stage { min-height: 310px; gap: 18px; padding: 26px 20px 0; }
-  .audio-wave { height: 100px; gap: 2px; }
+  .audio-wave { height: 100px; }
   .audio-credit-row { margin-inline: -20px; padding-inline: 9px; }
   .image-tools { right: 12px; bottom: 12px; }
   .credit-row { padding-inline: 9px; }

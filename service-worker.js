@@ -1,4 +1,4 @@
-const VERSION = "pflichtarten-v21";
+const VERSION = "pflichtarten-v22";
 const SHELL_CACHE = `${VERSION}-shell`;
 const DATA_CACHE = `${VERSION}-data`;
 const PHOTO_CACHE = `${VERSION}-photos`;
@@ -6,13 +6,13 @@ const BASE = new URL("./", self.location);
 const shellFiles = [
   "./",
   "./index.html",
-  "./styles.css?v=19",
+  "./styles.css?v=20",
   "./species.js?v=4",
   "./taxonomy.js?v=2",
   "./features.js?v=2",
   "./features-extra.js?v=1",
   "./app.js?v=20",
-  "./audio.js?v=4",
+  "./audio.js?v=5",
   "./extras.js?v=6",
   "./manifest.webmanifest?v=1",
   "./icons/icon.svg",
