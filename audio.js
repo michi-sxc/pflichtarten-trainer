@@ -3,9 +3,11 @@ const birdSoundPools = new Map();
 const WAVE_VIEWBOX_WIDTH = 720;
 const WAVE_PADDING = 10;
 const WAVE_CENTER = 56;
+const AUDIO_PROGRESS_MAX = 100000;
 let waveProgressClip;
 let wavePlayhead;
 let wavePlayheadDot;
+let audioFrameId = 0;
 
 function soundQueryNames(species) {
   return [...new Set([species.latin, ...species.latinAliases].map(name =>
@@ -256,6 +258,7 @@ function formatAudioTime(seconds) {
 }
 
 function resetAudioPosition() {
+  stopAudioProgressLoop(false);
   elements.audioProgress.value = 0;
   elements.audioProgress.style.setProperty("--position", "0%");
   elements.audioCurrent.textContent = "0:00";
@@ -400,12 +403,35 @@ function resetQuestionAudio() {
 
 function updateAudioTimeline() {
   const duration = elements.audio.duration;
-  elements.audioCurrent.textContent = formatAudioTime(elements.audio.currentTime);
-  elements.audioDuration.textContent = formatAudioTime(duration);
-  elements.audioProgress.value = Number.isFinite(duration) && duration > 0
-    ? Math.round(elements.audio.currentTime / duration * 1000) : 0;
-  elements.audioProgress.style.setProperty("--position", `${elements.audioProgress.value / 10}%`);
-  updateWaveProgress(elements.audioProgress.value / 1000);
+  const progress = Number.isFinite(duration) && duration > 0
+    ? Math.max(0, Math.min(1, elements.audio.currentTime / duration)) : 0;
+  const currentLabel = formatAudioTime(elements.audio.currentTime);
+  const durationLabel = formatAudioTime(duration);
+  if (elements.audioCurrent.textContent !== currentLabel) elements.audioCurrent.textContent = currentLabel;
+  if (elements.audioDuration.textContent !== durationLabel) elements.audioDuration.textContent = durationLabel;
+  elements.audioProgress.value = Math.round(progress * AUDIO_PROGRESS_MAX);
+  elements.audioProgress.style.setProperty("--position", `${progress * 100}%`);
+  updateWaveProgress(progress);
+}
+
+function stopAudioProgressLoop(sync = true) {
+  if (audioFrameId) cancelAnimationFrame(audioFrameId);
+  audioFrameId = 0;
+  if (sync) updateAudioTimeline();
+}
+
+function startAudioProgressLoop() {
+  if (audioFrameId) return;
+  const tick = () => {
+    if (elements.audio.paused || elements.audio.ended) {
+      audioFrameId = 0;
+      return;
+    }
+    updateAudioTimeline();
+    audioFrameId = requestAnimationFrame(tick);
+  };
+  updateAudioTimeline();
+  audioFrameId = requestAnimationFrame(tick);
 }
 
 function initBirdAudio() {
@@ -417,24 +443,31 @@ function initBirdAudio() {
     } else elements.audio.pause();
   });
   elements.audioProgress.addEventListener("input", () => {
-    if (Number.isFinite(elements.audio.duration)) elements.audio.currentTime = elements.audioProgress.value / 1000 * elements.audio.duration;
+    if (Number.isFinite(elements.audio.duration)) {
+      elements.audio.currentTime = elements.audioProgress.value / AUDIO_PROGRESS_MAX * elements.audio.duration;
+    }
+    updateAudioTimeline();
   });
   elements.newAudio.addEventListener("click", () => loadSound(state.queue[state.index], true));
   elements.audio.addEventListener("loadedmetadata", () => {
     updateAudioTimeline();
     elements.audioStatus.textContent = "Bereit zum Abspielen";
   });
-  elements.audio.addEventListener("timeupdate", updateAudioTimeline);
+  // browser event is low-fps, keep as background fallback
+  elements.audio.addEventListener("timeupdate", () => { if (!audioFrameId) updateAudioTimeline(); });
   elements.audio.addEventListener("play", () => {
     setAudioPlaying(true);
+    startAudioProgressLoop();
     elements.audioStatus.textContent = `${elements.audioType.textContent} läuft`;
   });
   elements.audio.addEventListener("pause", () => {
     setAudioPlaying(false);
+    stopAudioProgressLoop();
     if (elements.audio.currentTime > 0 && !elements.audio.ended) elements.audioStatus.textContent = "Pausiert";
   });
   elements.audio.addEventListener("ended", () => {
     setAudioPlaying(false);
+    stopAudioProgressLoop();
     elements.audioStatus.textContent = "Aufnahme beendet";
   });
   elements.audio.addEventListener("error", () => {
