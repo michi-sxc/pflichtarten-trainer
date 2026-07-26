@@ -247,9 +247,9 @@ select:focus, .input-answer input:focus { outline: 2px solid var(--rust); outlin
 .audio-spectrum { --position: 0%; position: relative; min-height: 156px; border-block: 1px solid var(--line); overflow: hidden; }
 .audio-spectrum-plot { position: absolute; inset: 10px 8px 28px 32px; overflow: hidden; }
 .audio-spectrum-grid, .audio-spectrum-data { position: absolute; inset: 0; }
-.audio-spectrum-grid { background: repeating-linear-gradient(to right, transparent 0, transparent calc(25% - 1px), var(--line) 25%), repeating-linear-gradient(to bottom, transparent 0, transparent calc(33.333% - 1px), var(--line) 33.333%); opacity: .75; }
-.audio-spectrum-data { background: var(--line-dark); -webkit-mask-position: center; mask-position: center; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-size: 100% 100%; mask-size: 100% 100%; }
-.audio-spectrum-data.base { opacity: .78; }
+.audio-spectrum-grid { background: repeating-linear-gradient(to right, transparent 0, transparent calc(25% - 1px), var(--line) 25%), repeating-linear-gradient(to bottom, transparent 0, transparent calc(33.333% - 1px), var(--line) 33.333%); opacity: .48; }
+.audio-spectrum-data { background: var(--ink); -webkit-mask-position: center; mask-position: center; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-size: 100% 100%; mask-size: 100% 100%; }
+.audio-spectrum-data.base { opacity: .92; }
 .audio-spectrum-data.played { background: var(--rust-dark); clip-path: inset(0 calc(100% - var(--position)) 0 0); }
 .audio-spectrum-playhead { position: absolute; z-index: 4; top: 0; bottom: 0; left: var(--position); width: 1px; background: var(--rust-dark); opacity: 0; pointer-events: none; }
 .audio-spectrum.has-progress .audio-spectrum-playhead { opacity: 1; }

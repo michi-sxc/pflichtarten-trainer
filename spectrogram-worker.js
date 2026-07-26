@@ -31,14 +31,21 @@ self.onmessage = ({ data }) => {
     }
   }
 
-  // trim noise floor so calls stay legible
+  // remove each frequency band's steady noise before global contrast
+  const rowValues = new Float32Array(columns);
+  for (let row = 0; row < rows; row++) {
+    for (let column = 0; column < columns; column++) rowValues[column] = values[column * rows + row];
+    rowValues.sort();
+    const floor = rowValues[Math.floor(columns * .55)];
+    for (let column = 0; column < columns; column++) values[column * rows + row] -= floor;
+  }
   const sorted = Float32Array.from(values).sort();
-  const low = sorted[Math.floor(sorted.length * .44)];
-  const high = sorted[Math.floor(sorted.length * .995)];
+  const low = Math.max(0, sorted[Math.floor(sorted.length * .64)]);
+  const high = sorted[Math.floor(sorted.length * .996)];
   const range = Math.max(1, high - low);
   for (let index = 0; index < values.length; index++) {
     const normalized = Math.max(0, Math.min(1, (values[index] - low) / range));
-    values[index] = Math.pow(normalized, .72);
+    values[index] = normalized < .035 ? 0 : Math.pow((normalized - .035) / .965, .55);
   }
   self.postMessage({ values, columns, rows }, [values.buffer]);
 };

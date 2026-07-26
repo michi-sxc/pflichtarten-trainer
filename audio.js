@@ -1,10 +1,11 @@
 const COMMONS_AUDIO_API = "https://commons.wikimedia.org/w/api.php";
+const SPECTROGRAM_STORAGE_KEY = "pflichtarten-spectrograms-v2";
 const birdSoundPools = new Map();
-const spectrogramCache = new Map();
-const SPECTROGRAM_COLUMNS = 480;
-const SPECTROGRAM_ROWS = 96;
+const spectrogramCache = loadStoredSpectrograms();
+const SPECTROGRAM_COLUMNS = 360;
+const SPECTROGRAM_ROWS = 72;
 const SPECTROGRAM_FFT_SIZE = 512;
-const SPECTROGRAM_WINDOWS = 6;
+const SPECTROGRAM_WINDOWS = 3;
 const AUDIO_PROGRESS_MAX = 100000;
 let spectrogramToken = 0;
 let audioFrameId = 0;
@@ -29,11 +30,21 @@ function classifySoundType(title, description) {
   return labels.length ? labels.join(" / ") : "Vogelstimme";
 }
 
-function playableSoundUrl(info) {
+function playableSoundSource(info) {
   const derivative = info.derivatives?.find(item => item.type === "audio/mpeg") ||
     info.derivatives?.find(item => item.type?.startsWith("audio/"));
   const url = derivative?.src || info.url;
-  return url ? new URL(url, "https://commons.wikimedia.org").href : "";
+  if (!url) return null;
+  const absoluteUrl = new URL(url, "https://commons.wikimedia.org").href;
+  const original = info.derivatives?.find(item =>
+    new URL(item.src, "https://commons.wikimedia.org").href === info.url);
+  const duration = info.size && (original?.bandwidth || derivative?.bandwidth) ?
+    info.size * 8 / (original?.bandwidth || derivative.bandwidth) : 0;
+  return {
+    url: absoluteUrl,
+    duration,
+    bytes: duration && derivative?.bandwidth ? duration * derivative.bandwidth / 8 : info.size || 0
+  };
 }
 
 function soundConfidence(page, expectedName, categoryMatch) {
@@ -52,25 +63,27 @@ function commonsSound(page, expectedName, categoryMatch = false) {
   const title = page.title?.replace(/^File:/i, "") || "";
   const confidence = soundConfidence(page, expectedName, categoryMatch);
   if (!info || !confidence) return null;
-  const url = playableSoundUrl(info);
-  if (!url) return null;
+  const source = playableSoundSource(info);
+  if (!source) return null;
   const metadata = info.extmetadata || {};
   const artist = stripHtml(metadata.Artist?.value) || "Wikimedia-Commons-Mitwirkende";
   const license = metadata.LicenseShortName?.value ? ` · ${stripHtml(metadata.LicenseShortName.value)}` : "";
   return {
-    url,
+    url: source.url,
     type: classifySoundType(title, description),
     credit: `${artist}${license}`,
     link: info.descriptionurl || `https://commons.wikimedia.org/wiki/${encodeURIComponent(page.title)}`,
     confidence,
-    canAnalyze: true
+    canAnalyze: true,
+    durationEstimate: source.duration,
+    bytesEstimate: source.bytes
   };
 }
 
 function commonsAudioParams(values) {
   return new URLSearchParams({
     action: "query", prop: "videoinfo",
-    viprop: "url|derivatives|extmetadata|mime",
+    viprop: "url|derivatives|extmetadata|mime|size",
     viextmetadatafilter: "ImageDescription|Artist|LicenseShortName",
     maxlag: "5", format: "json", origin: "*", ...values
   });
@@ -103,7 +116,7 @@ async function fetchCommonsSounds(name) {
       const pages = await fetchCommonsAudioPages(params);
       candidates.push(...pages.map(page => commonsSound(page, name, categoryMatch)).filter(Boolean));
     } catch { /* next search mode can still recover */ }
-    if (candidates.filter(item => item.confidence >= 2).length >= 4) break;
+    if (candidates.filter(item => item.confidence >= 2).length >= 2) break;
   }
   return candidates;
 }
@@ -113,7 +126,7 @@ async function fetchCommonsSpeciesSounds(species) {
   for (const name of soundQueryNames(species)) {
     try { candidates.push(...await fetchCommonsSounds(name)); }
     catch { /* aliases below can still work */ }
-    if (candidates.filter(item => item.confidence >= 2).length >= 4) break;
+    if (candidates.filter(item => item.confidence >= 2).length >= 2) break;
   }
   return candidates;
 }
@@ -150,17 +163,33 @@ function soundFormatScore(url) {
   return /\.(?:mp3|m4a|aac)(?:\?|$)/i.test(url) ? 2 : /\.(?:ogg|oga|webm)(?:\?|$)/i.test(url) ? 1 : 0;
 }
 
+function soundLengthScore(sound) {
+  const duration = sound.durationEstimate;
+  if (!duration) return 1;
+  if (duration >= 3 && duration <= 90) return 3;
+  return duration <= 180 ? 2 : 0;
+}
+
+function mergeSoundCandidates(...groups) {
+  return [...groups.flat().reduce((items, item) => {
+    const previous = items.get(item.url);
+    if (!previous || item.confidence > previous.confidence) items.set(item.url, item);
+    return items;
+  }, new Map()).values()];
+}
+
 async function fetchBirdSound(species) {
   let candidates = birdSoundPools.get(species.id);
   if (!candidates) {
-    const sources = await Promise.allSettled([fetchCommonsSpeciesSounds(species), fetchINaturalistSounds(species)]);
-    candidates = sources.flatMap(result => result.status === "fulfilled" ? result.value : []);
-    // same transcode can surface via search and category
-    candidates = [...candidates.reduce((items, item) => {
-      const previous = items.get(item.url);
-      if (!previous || item.confidence > previous.confidence) items.set(item.url, item);
-      return items;
-    }, new Map()).values()];
+    const commons = await fetchCommonsSpeciesSounds(species).catch(() => []);
+    candidates = mergeSoundCandidates(commons);
+    if (!candidates.length) {
+      candidates = mergeSoundCandidates(await fetchINaturalistSounds(species).catch(() => []));
+    } else {
+      // dont block first paint on a fallback source
+      fetchINaturalistSounds(species).then(fallbacks =>
+        birdSoundPools.set(species.id, mergeSoundCandidates(candidates, fallbacks))).catch(() => {});
+    }
     if (candidates.length) birdSoundPools.set(species.id, candidates);
   }
   if (!candidates.length) throw new Error("No bird recording");
@@ -168,8 +197,11 @@ async function fetchBirdSound(species) {
   const fresh = candidates.filter(item => !recent.includes(item.url));
   // reliable and labeled first, weaker category hits remain load fallbacks
   const variants = shuffle(fresh.length ? fresh : candidates).sort((a, b) =>
+    Number(b.canAnalyze && b.confidence >= 2) - Number(a.canAnalyze && a.confidence >= 2) ||
     b.confidence - a.confidence || Number(b.canAnalyze) - Number(a.canAnalyze) ||
     Number(b.type !== "Vogelstimme") - Number(a.type !== "Vogelstimme") ||
+    soundLengthScore(b) - soundLengthScore(a) ||
+    (a.bytesEstimate || Number.MAX_SAFE_INTEGER) - (b.bytesEstimate || Number.MAX_SAFE_INTEGER) ||
     soundFormatScore(b.url) - soundFormatScore(a.url));
   return { ...variants[0], variants, variantIndex: 0 };
 }
@@ -217,9 +249,20 @@ function resetSpectrogram(text = "Spektrogramm wird erstellt …") {
   updateSpectrogramProgress(0);
 }
 
+function loadStoredSpectrograms() {
+  try { return new Map(JSON.parse(localStorage.getItem(SPECTROGRAM_STORAGE_KEY) || "[]")); }
+  catch { return new Map(); }
+}
+
 function cacheSpectrogram(url, mask) {
   spectrogramCache.set(url, mask);
-  if (spectrogramCache.size > 16) spectrogramCache.delete(spectrogramCache.keys().next().value);
+  if (spectrogramCache.size > 12) spectrogramCache.delete(spectrogramCache.keys().next().value);
+  // keep processed spectra, avoids another download and decode later
+  try {
+    const reusable = [...spectrogramCache].filter(([, value]) => value);
+    localStorage.setItem(SPECTROGRAM_STORAGE_KEY, JSON.stringify(reusable));
+  }
+  catch { /* cache is optional */ }
 }
 
 function collectSpectrogramSamples(buffer) {
@@ -245,7 +288,7 @@ function collectSpectrogramSamples(buffer) {
 
 function analyzeSpectrogram(samples, sampleRate) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker("spectrogram-worker.js?v=2");
+    const worker = new Worker("spectrogram-worker.js?v=3");
     worker.onmessage = ({ data }) => {
       worker.terminate();
       if (data.error) reject(new Error(data.error));
