@@ -21,13 +21,13 @@
   <link rel="dns-prefetch" href="https://static.inaturalist.org">
   <link rel="dns-prefetch" href="https://commons.wikimedia.org">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=21">
+  <link rel="stylesheet" href="styles.css?v=23">
   <script defer src="species.js?v=4"></script>
   <script defer src="taxonomy.js?v=2"></script>
   <script defer src="features.js?v=2"></script>
   <script defer src="features-extra.js?v=1"></script>
-  <script defer src="app.js?v=20"></script>
-  <script defer src="audio.js?v=6"></script>
+  <script defer src="app.js?v=21"></script>
+  <script defer src="audio.js?v=8"></script>
   <script defer src="extras.js?v=7"></script>
 </head>
 <body>
@@ -172,19 +172,26 @@
               <span id="audio-type" class="audio-type">Vogelstimme</span>
               <span id="audio-status" class="audio-status" role="status">Aufnahme wird geladen …</span>
             </div>
-            <div id="audio-wave" class="audio-wave" aria-hidden="true"></div>
+            <div id="audio-spectrum" class="audio-spectrum loading">
+              <div class="audio-spectrum-plot">
+                <div class="audio-spectrum-grid" aria-hidden="true"></div>
+                <div id="audio-spectrum-base" class="audio-spectrum-data base" aria-hidden="true"></div>
+                <div id="audio-spectrum-played" class="audio-spectrum-data played" aria-hidden="true"></div>
+                <div id="audio-spectrum-playhead" class="audio-spectrum-playhead" aria-hidden="true"></div>
+                <span id="audio-spectrum-note" class="audio-spectrum-note">Spektrogramm wird erstellt …</span>
+                <input id="audio-progress" class="audio-progress" type="range" min="0" max="100000" value="0" aria-label="Position im Spektrogramm" disabled>
+              </div>
+              <div class="audio-frequency-axis" aria-hidden="true"><span>12</span><span>8</span><span>4</span><span>0 kHz</span></div>
+              <div class="audio-time"><span id="audio-current">0:00</span><span id="audio-duration">–:––</span></div>
+            </div>
             <div class="audio-controls">
               <button id="audio-play" class="audio-play" type="button" aria-label="Aufnahme abspielen" disabled><span aria-hidden="true">▶</span></button>
-              <div class="audio-timeline">
-                <input id="audio-progress" class="audio-progress" type="range" min="0" max="100000" value="0" aria-label="Position in der Aufnahme" disabled>
-                <div class="audio-time"><span id="audio-current">0:00</span><span id="audio-duration">–:––</span></div>
-              </div>
+              <button id="new-audio" class="audio-change text-button" type="button">Andere Aufnahme</button>
             </div>
             <div id="audio-error" class="audio-error" hidden>
               <strong>Aufnahme konnte nicht geladen werden.</strong>
               <span>Versuche eine andere Aufnahme oder prüfe die Internetverbindung.</span>
             </div>
-            <button id="new-audio" class="audio-change text-button" type="button">Andere Aufnahme</button>
             <audio id="species-audio" preload="metadata"></audio>
             <div class="audio-credit-row">
               <span id="audio-credit">Aufnahmequelle wird geladen …</span>

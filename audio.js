@@ -1,12 +1,12 @@
 const COMMONS_AUDIO_API = "https://commons.wikimedia.org/w/api.php";
 const birdSoundPools = new Map();
-const WAVE_VIEWBOX_WIDTH = 720;
-const WAVE_PADDING = 10;
-const WAVE_CENTER = 56;
+const spectrogramCache = new Map();
+const SPECTROGRAM_COLUMNS = 480;
+const SPECTROGRAM_ROWS = 96;
+const SPECTROGRAM_FFT_SIZE = 512;
+const SPECTROGRAM_WINDOWS = 6;
 const AUDIO_PROGRESS_MAX = 100000;
-let waveProgressClip;
-let wavePlayhead;
-let wavePlayheadDot;
+let spectrogramToken = 0;
 let audioFrameId = 0;
 
 function soundQueryNames(species) {
@@ -62,7 +62,8 @@ function commonsSound(page, expectedName, categoryMatch = false) {
     type: classifySoundType(title, description),
     credit: `${artist}${license}`,
     link: info.descriptionurl || `https://commons.wikimedia.org/wiki/${encodeURIComponent(page.title)}`,
-    confidence
+    confidence,
+    canAnalyze: true
   };
 }
 
@@ -126,7 +127,8 @@ function iNaturalistSound(observation, sound) {
     type: classifySoundType("", description),
     credit: sound.attribution || "iNaturalist-Mitwirkende",
     link: observation.uri || `https://www.inaturalist.org/observations/${observation.id}`,
-    confidence: 3
+    confidence: 3,
+    canAnalyze: false
   };
 }
 
@@ -166,7 +168,8 @@ async function fetchBirdSound(species) {
   const fresh = candidates.filter(item => !recent.includes(item.url));
   // reliable and labeled first, weaker category hits remain load fallbacks
   const variants = shuffle(fresh.length ? fresh : candidates).sort((a, b) =>
-    b.confidence - a.confidence || Number(b.type !== "Vogelstimme") - Number(a.type !== "Vogelstimme") ||
+    b.confidence - a.confidence || Number(b.canAnalyze) - Number(a.canAnalyze) ||
+    Number(b.type !== "Vogelstimme") - Number(a.type !== "Vogelstimme") ||
     soundFormatScore(b.url) - soundFormatScore(a.url));
   return { ...variants[0], variants, variantIndex: 0 };
 }
@@ -180,76 +183,137 @@ function currentSound(recording) {
   return recording?.variants?.[recording.variantIndex] || recording;
 }
 
-function waveRandom(seed) {
-  let value = seed || 1;
-  return () => {
-    value = Math.imul(value ^ value >>> 15, 1 | value);
-    value ^= value + Math.imul(value ^ value >>> 7, 61 | value);
-    return ((value ^ value >>> 14) >>> 0) / 4294967296;
-  };
-}
-
-function waveSeed(value) {
-  let hash = 2166136261;
-  for (const char of value || "pflichtarten") {
-    hash ^= char.codePointAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-// stable per recording, works with cross-origin audio too
-function waveformPath(value) {
-  const count = 86;
-  const random = waveRandom(waveSeed(value));
-  const phaseA = random() * Math.PI * 2;
-  const phaseB = random() * Math.PI * 2;
-  const raw = Array.from({ length: count }, (_, index) => {
-    const position = index / (count - 1);
-    const phrase = .62 + Math.sin(index * .31 + phaseA) * .17 + Math.sin(index * .12 + phaseB) * .13;
-    const edge = Math.pow(Math.sin(Math.PI * (.04 + position * .92)), .3);
-    return 9 + Math.max(.16, phrase * (.48 + random() * .68)) * edge * 72;
-  });
-  const heights = raw.map((height, index) =>
-    (raw[index - 1] || height) * .2 + height * .6 + (raw[index + 1] || height) * .2);
-  return heights.map((height, index) => {
-    const x = WAVE_PADDING + index * (WAVE_VIEWBOX_WIDTH - WAVE_PADDING * 2) / (count - 1);
-    const half = Math.min(43, height / 2);
-    return `M${x.toFixed(1)} ${(WAVE_CENTER - half).toFixed(1)}V${(WAVE_CENTER + half).toFixed(1)}`;
-  }).join("");
-}
-
-function updateWaveProgress(progress) {
+function updateSpectrogramProgress(progress) {
   const position = Math.max(0, Math.min(1, progress || 0));
-  const x = WAVE_PADDING + position * (WAVE_VIEWBOX_WIDTH - WAVE_PADDING * 2);
-  waveProgressClip?.setAttribute("width", String(position ? x : 0));
-  wavePlayhead?.setAttribute("x1", String(x));
-  wavePlayhead?.setAttribute("x2", String(x));
-  wavePlayheadDot?.setAttribute("cx", String(x));
-  elements.audioWave.classList.toggle("has-progress", position > .002);
+  elements.audioSpectrum.style.setProperty("--position", `${position * 100}%`);
+  elements.audioSpectrum.classList.toggle("has-progress", position > .002);
 }
 
-function renderAudioWave(value = "pflichtarten") {
-  const path = waveformPath(value);
-  elements.audioWave.querySelector(".audio-wave-base")?.setAttribute("d", path);
-  elements.audioWave.querySelector(".audio-wave-played")?.setAttribute("d", path);
-  updateWaveProgress(0);
+function setSpectrogramMask(mask) {
+  for (const layer of [elements.audioSpectrumBase, elements.audioSpectrumPlayed]) {
+    layer.style.webkitMaskImage = `url("${mask}")`;
+    layer.style.maskImage = `url("${mask}")`;
+  }
+  elements.audioSpectrum.classList.remove("loading", "unavailable");
+  elements.audioSpectrum.classList.add("ready");
+  elements.audioSpectrumNote.hidden = true;
 }
 
-function buildAudioWave() {
-  elements.audioWave.innerHTML = `
-    <svg viewBox="0 0 ${WAVE_VIEWBOX_WIDTH} 112" preserveAspectRatio="none" focusable="false">
-      <defs><clipPath id="audio-wave-progress-clip"><rect class="audio-wave-progress-clip" x="0" y="0" width="0" height="112"></rect></clipPath></defs>
-      <path class="audio-wave-axis" d="M6 ${WAVE_CENTER}H714"></path>
-      <path class="audio-wave-base"></path>
-      <path class="audio-wave-played" clip-path="url(#audio-wave-progress-clip)"></path>
-      <line class="audio-wave-playhead" x1="${WAVE_PADDING}" x2="${WAVE_PADDING}" y1="12" y2="100"></line>
-      <circle class="audio-wave-playhead-dot" cx="${WAVE_PADDING}" cy="${WAVE_CENTER}" r="3"></circle>
-    </svg>`;
-  waveProgressClip = elements.audioWave.querySelector(".audio-wave-progress-clip");
-  wavePlayhead = elements.audioWave.querySelector(".audio-wave-playhead");
-  wavePlayheadDot = elements.audioWave.querySelector(".audio-wave-playhead-dot");
-  renderAudioWave();
+function showSpectrogramNote(text, unavailable = false) {
+  for (const layer of [elements.audioSpectrumBase, elements.audioSpectrumPlayed]) {
+    layer.style.removeProperty("-webkit-mask-image");
+    layer.style.removeProperty("mask-image");
+  }
+  elements.audioSpectrum.classList.remove("ready");
+  elements.audioSpectrum.classList.toggle("loading", !unavailable);
+  elements.audioSpectrum.classList.toggle("unavailable", unavailable);
+  elements.audioSpectrumNote.textContent = text;
+  elements.audioSpectrumNote.hidden = false;
+}
+
+function resetSpectrogram(text = "Spektrogramm wird erstellt …") {
+  spectrogramToken++;
+  showSpectrogramNote(text);
+  updateSpectrogramProgress(0);
+}
+
+function cacheSpectrogram(url, mask) {
+  spectrogramCache.set(url, mask);
+  if (spectrogramCache.size > 16) spectrogramCache.delete(spectrogramCache.keys().next().value);
+}
+
+function collectSpectrogramSamples(buffer) {
+  const samples = new Float32Array(SPECTROGRAM_COLUMNS * SPECTROGRAM_WINDOWS * SPECTROGRAM_FFT_SIZE);
+  const channels = Array.from({ length: Math.min(2, buffer.numberOfChannels) }, (_, index) => buffer.getChannelData(index));
+  for (let column = 0; column < SPECTROGRAM_COLUMNS; column++) {
+    const regionStart = column / SPECTROGRAM_COLUMNS * buffer.length;
+    const regionEnd = (column + 1) / SPECTROGRAM_COLUMNS * buffer.length;
+    for (let sampleWindow = 0; sampleWindow < SPECTROGRAM_WINDOWS; sampleWindow++) {
+      const center = regionStart + (sampleWindow + .5) / SPECTROGRAM_WINDOWS * (regionEnd - regionStart);
+      const sourceStart = Math.max(0, Math.min(buffer.length - SPECTROGRAM_FFT_SIZE,
+        Math.round(center - SPECTROGRAM_FFT_SIZE / 2)));
+      const targetStart = (column * SPECTROGRAM_WINDOWS + sampleWindow) * SPECTROGRAM_FFT_SIZE;
+      for (let index = 0; index < SPECTROGRAM_FFT_SIZE; index++) {
+        let value = 0;
+        for (const channel of channels) value += channel[sourceStart + index] || 0;
+        samples[targetStart + index] = value / channels.length;
+      }
+    }
+  }
+  return samples;
+}
+
+function analyzeSpectrogram(samples, sampleRate) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker("spectrogram-worker.js?v=2");
+    worker.onmessage = ({ data }) => {
+      worker.terminate();
+      if (data.error) reject(new Error(data.error));
+      else resolve(data);
+    };
+    worker.onerror = event => {
+      worker.terminate();
+      reject(new Error(event.message || "Spectrogram worker failed"));
+    };
+    worker.postMessage({
+      samples,
+      sampleRate,
+      columns: SPECTROGRAM_COLUMNS,
+      rows: SPECTROGRAM_ROWS,
+      fftSize: SPECTROGRAM_FFT_SIZE,
+      windows: SPECTROGRAM_WINDOWS
+    }, [samples.buffer]);
+  });
+}
+
+function spectrogramMask(values, columns, rows) {
+  const canvas = document.createElement("canvas");
+  canvas.width = columns;
+  canvas.height = rows;
+  const context = canvas.getContext("2d");
+  const image = context.createImageData(columns, rows);
+  for (let column = 0; column < columns; column++) {
+    for (let row = 0; row < rows; row++) {
+      const source = column * rows + row;
+      const target = (row * columns + column) * 4;
+      image.data[target + 3] = Math.round(values[source] * 255);
+    }
+  }
+  context.putImageData(image, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
+async function renderSpectrogram(sound) {
+  const token = ++spectrogramToken;
+  const cached = spectrogramCache.get(sound.url);
+  if (cached !== undefined) {
+    if (cached) setSpectrogramMask(cached);
+    else showSpectrogramNote("Spektrogramm für diese Quelle nicht verfügbar", true);
+    return;
+  }
+  showSpectrogramNote("Spektrogramm wird erstellt …");
+  if (!sound.canAnalyze || !window.Worker) {
+    cacheSpectrogram(sound.url, null);
+    if (token === spectrogramToken) showSpectrogramNote("Spektrogramm für diese Quelle nicht verfügbar", true);
+    return;
+  }
+  try {
+    const response = await fetchWithTimeout(sound.url, 20000);
+    if (!response.ok) throw new Error(`Audio ${response.status}`);
+    const bytes = await response.arrayBuffer();
+    if (bytes.byteLength > 24 * 1024 * 1024) throw new Error("Audio too large");
+    const OfflineContext = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OfflineContext) throw new Error("No audio decoder");
+    const buffer = await new OfflineContext(1, 1, 44100).decodeAudioData(bytes);
+    const samples = collectSpectrogramSamples(buffer);
+    const analysis = await analyzeSpectrogram(samples, buffer.sampleRate);
+    const mask = spectrogramMask(analysis.values, analysis.columns, analysis.rows);
+    cacheSpectrogram(sound.url, mask);
+    if (token === spectrogramToken) setSpectrogramMask(mask);
+  } catch {
+    cacheSpectrogram(sound.url, null);
+    if (token === spectrogramToken) showSpectrogramNote("Spektrogramm für diese Quelle nicht verfügbar", true);
+  }
 }
 
 function formatAudioTime(seconds) {
@@ -260,10 +324,9 @@ function formatAudioTime(seconds) {
 function resetAudioPosition() {
   stopAudioProgressLoop(false);
   elements.audioProgress.value = 0;
-  elements.audioProgress.style.setProperty("--position", "0%");
   elements.audioCurrent.textContent = "0:00";
   elements.audioDuration.textContent = "–:––";
-  updateWaveProgress(0);
+  updateSpectrogramProgress(0);
 }
 
 function setAudioPlaying(playing) {
@@ -289,11 +352,14 @@ function displaySound(recording) {
   elements.audio.dataset.token = String(state.audioToken);
   elements.audio.src = sound.url;
   elements.audio.load();
-  renderAudioWave(sound.url);
+  renderSpectrogram(sound);
   rememberSound(species, sound.url);
 }
 
 function showAudioFailure() {
+  spectrogramToken++;
+  showSpectrogramNote("Keine Aufnahme verfügbar", true);
+  updateSpectrogramProgress(0);
   elements.audio.pause();
   setAudioPlaying(false);
   elements.audioError.hidden = false;
@@ -318,6 +384,7 @@ async function loadSound(species = state.queue[state.index], force = false) {
   elements.audio.pause();
   setAudioPlaying(false);
   resetAudioPosition();
+  resetSpectrogram("Spektrogramm wird vorbereitet …");
   elements.audioError.hidden = true;
   elements.audioStatus.textContent = "Aufnahme wird geladen …";
   elements.audioCredit.textContent = "Aufnahmequelle wird geladen …";
@@ -394,6 +461,7 @@ function revealQuestionPhoto(species) {
 
 function resetQuestionAudio() {
   state.audioToken++;
+  resetSpectrogram("Spektrogramm wird vorbereitet …");
   elements.audio.pause();
   elements.audio.removeAttribute("src");
   elements.audio.load();
@@ -410,8 +478,7 @@ function updateAudioTimeline() {
   if (elements.audioCurrent.textContent !== currentLabel) elements.audioCurrent.textContent = currentLabel;
   if (elements.audioDuration.textContent !== durationLabel) elements.audioDuration.textContent = durationLabel;
   elements.audioProgress.value = Math.round(progress * AUDIO_PROGRESS_MAX);
-  elements.audioProgress.style.setProperty("--position", `${progress * 100}%`);
-  updateWaveProgress(progress);
+  updateSpectrogramProgress(progress);
 }
 
 function stopAudioProgressLoop(sync = true) {
@@ -435,7 +502,6 @@ function startAudioProgressLoop() {
 }
 
 function initBirdAudio() {
-  buildAudioWave();
   elements.audioPlay.addEventListener("click", async () => {
     if (elements.audio.paused) {
       try { await elements.audio.play(); }
